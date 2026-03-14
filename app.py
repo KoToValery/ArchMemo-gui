@@ -85,14 +85,25 @@ def _calc_summary(projects: list, errors: list) -> dict:
 # ─── Запис на кеш в диск ──────────────────────────────────────────────────────
 def save_cache_entry(year: str, city: str, report: dict):
     projects = report.get("projects", [])
-    key = _cache_key(year, city)
+    city_name = (city or "ALL").upper()
+    key = _cache_key(year, city_name)
     state["disk_cache"][key] = {
         "timestamp": datetime.now().strftime("%d.%m.%Y %H:%M"),
         "year":      year,
-        "city":      city or "ALL",
+        "city":      city_name,
         "projects":  projects,
         "summary":   _calc_summary(projects, report.get("errors", [])),
     }
+
+    # Презаписване на файла на диска
+    label = f"{year}_{city_name.lower()}"
+    fpath = os.path.join(OUTPUT_DIR, f"cache_{label}.json")
+    try:
+        with open(fpath, "w", encoding="utf-8") as f:
+            json.dump(report, f, ensure_ascii=False, indent=2)
+        log.info("💾 Кешът е записан на диск: %s", fpath)
+    except Exception as exc:
+        log.error("Грешка при запис на кеш %s: %s", fpath, exc)
 
 
 # ─── Генериране на HTML от проекти ────────────────────────────────────────────
@@ -256,6 +267,12 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .cache-badge.warn { background: var(--warn); }
   .cache-badge.err  { background: var(--err); }
 
+  #contextMenu { position: fixed; background: #fff; border: 1px solid #ddd;
+                 box-shadow: 2px 2px 10px rgba(0,0,0,0.15); border-radius: 6px;
+                 padding: 5px 0; min-width: 140px; display: none; z-index: 1000; }
+  #contextMenu div { padding: 8px 15px; font-size: 13px; cursor: pointer; color: var(--text); }
+  #contextMenu div:hover { background: #f8f9fa; color: var(--err); }
+
   .status-bar { margin: 0 12px 8px; padding: 10px 14px; border-radius: 8px;
                 font-size: 13px; display: none; }
   .status-bar.running { display: block; background: #eaf4fb; color: var(--info);
@@ -409,10 +426,10 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 
 {% if cache_entries %}
 <div class="cache-wrap">
-  <div class="cache-title">📚 Налични данни</div>
+  <div class="cache-title">📚 Налични данни (десен бутон за изтриване)</div>
   <div class="cache-list" id="cacheList">
     {% for key, entry in cache_entries %}
-    <div class="cache-item" id="ci-{{ key }}" onclick="loadFromCache('{{ key }}')">
+    <div class="cache-item" id="ci-{{ key }}" onclick="loadFromCache('{{ key }}')" oncontextmenu="showContextMenu(event, '{{ key }}')">
       <div class="cache-time">{{ entry.timestamp }}</div>
       <div class="cache-info">{{ entry.year }} / {{ entry.city }}</div>
       <div class="cache-summary">
@@ -425,6 +442,10 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   </div>
 </div>
 {% endif %}
+
+<div id="contextMenu">
+  <div onclick="deleteCache()">🗑 Изтрий кеша</div>
+</div>
 
 <div class="status-bar" id="statusBar"></div>
 
@@ -463,6 +484,45 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <script>
 let pollTimer   = null;
 let currentKey  = null;
+let menuKey     = null;
+
+function showContextMenu(e, key) {
+  e.preventDefault();
+  menuKey = key;
+  const menu = document.getElementById('contextMenu');
+  menu.style.display = 'block';
+  menu.style.left = e.pageX + 'px';
+  menu.style.top = e.pageY + 'px';
+  
+  // Close menu on click elsewhere
+  document.addEventListener('click', hideContextMenu, { once: true });
+}
+
+function hideContextMenu() {
+  document.getElementById('contextMenu').style.display = 'none';
+}
+
+function deleteCache() {
+  if (!menuKey) return;
+  if (!confirm('Сигурни ли сте, че искате да изтриете този кеш?')) return;
+  
+  fetch('/delete_cache', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({key: menuKey})
+  }).then(r => r.json()).then(d => {
+    if (d.status === 'deleted') {
+      const el = document.getElementById('ci-' + menuKey);
+      if (el) el.remove();
+      if (currentKey === menuKey) {
+        document.getElementById('results').innerHTML = '';
+        document.getElementById('toolbar').style.display = 'none';
+        currentKey = null;
+      }
+      updateFilters();
+    }
+  });
+}
 
 function startCheck(e) {
   e.preventDefault();
@@ -602,6 +662,7 @@ function refreshCacheList(entries) {
       el.className = 'cache-item';
       el.id = 'ci-' + key;
       el.onclick = () => loadFromCache(key);
+      el.oncontextmenu = (e) => showContextMenu(e, key);
       list.appendChild(el);
     }
     el.innerHTML = `<div class="cache-time">${entry.timestamp}</div>
@@ -612,6 +673,38 @@ function refreshCacheList(entries) {
         <span class="cache-badge err">${entry.summary.errors}</span>
       </div>`;
   });
+  updateFilters();
+}
+
+function updateFilters() {
+  const yearsSet = new Set(['2024', '2025', '2026']);
+  const citiesSet = new Set(['БЛАГОЕВГРАД', 'СОФИЯ', 'БАНСКО', 'РАЗЛОГ', 'САМОКОВ', 'КЮСТЕНДИЛ']);
+  
+  // Collect from current cache items
+  document.querySelectorAll('.cache-item').forEach(el => {
+    const info = el.querySelector('.cache-info').textContent;
+    const parts = info.split(' / ');
+    if (parts.length === 2) {
+      yearsSet.add(parts[0].trim());
+      if (parts[1].trim() !== 'ALL') citiesSet.add(parts[1].trim());
+    }
+  });
+
+  const yearSelect = document.getElementById('year');
+  const citySelect = document.getElementById('city');
+  const currentYear = yearSelect.value;
+  const currentCity = citySelect.value;
+
+  // Update years
+  yearSelect.innerHTML = Array.from(yearsSet).sort().reverse().map(y => 
+    `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`
+  ).join('');
+
+  // Update cities
+  citySelect.innerHTML = '<option value="">Всички градове</option>' + 
+    Array.from(citiesSet).sort().map(c => 
+      `<option value="${c}" ${c === currentCity ? 'selected' : ''}>${c}</option>`
+    ).join('');
 }
 
 function setStatus(type, msg) {
@@ -652,6 +745,7 @@ function toggleProject(header) {
 }
 
 window.addEventListener('DOMContentLoaded', function() {
+  updateFilters();
   {% if running %}
   document.getElementById('runBtn').disabled = true;
   document.getElementById('fullScanBtn').disabled = true;
@@ -749,6 +843,30 @@ def toggle_hide_endpoint():
         state["hidden_ids"].add(pid)
         hidden = True
     return jsonify({"hidden": hidden})
+
+
+@app.route("/delete_cache", methods=["POST"])
+def delete_cache_endpoint():
+    key = request.get_json(force=True).get("key", "")
+    if not key or key not in state["disk_cache"]:
+        return jsonify({"error": "Невалиден ключ за кеш"}), 400
+    
+    entry = state["disk_cache"][key]
+    year = entry["year"]
+    city = entry["city"].lower()
+    label = f"{year}_{city}"
+    fpath = os.path.join(OUTPUT_DIR, f"cache_{label}.json")
+    
+    try:
+        if os.path.exists(fpath):
+            os.remove(fpath)
+            log.info("🗑 Изтрит кеш файл: %s", fpath)
+        
+        del state["disk_cache"][key]
+        return jsonify({"status": "deleted"})
+    except Exception as exc:
+        log.error("Грешка при изтриване на кеш %s: %s", fpath, exc)
+        return jsonify({"error": str(exc)}), 500
 
 
 @app.route("/share_link")
