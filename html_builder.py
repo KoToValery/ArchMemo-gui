@@ -9,8 +9,11 @@ def build_html_report(city: str, project_name: str, full_name: str,
                       delivered_files: list,
                       specialties_rows: list, specialties_detail: dict,
                       project_path: str,
-                      stanovishta: dict) -> str:
+                      stanovishta: dict,
+                      podlozhki_files: list = None) -> str:
     check_time = datetime.now().strftime("%d.%m.%Y %H:%M")
+    if podlozhki_files is None:
+        podlozhki_files = []
 
     # Статус на архитектура
     if outdated_arch:
@@ -61,7 +64,13 @@ def build_html_report(city: str, project_name: str, full_name: str,
     delivered_html = ""
     if delivered_files:
         delivered_rows = "".join(
-            f'<tr><td>{f["name"]}</td><td class="date">{f["date"]}</td></tr>'
+            f'<tr>'
+            f'<td>{"<a href=\"" + f["web_url"] + "\" target=\"_blank\" rel=\"noopener\">" if f.get("web_url") else ""}'
+            f'{f["name"]}'
+            f'{"</a>" if f.get("web_url") else ""}'
+            f'</td>'
+            f'<td class="date">{f["date"][:10] if len(f["date"]) > 10 else f["date"]}</td>'
+            f'</tr>'
             for f in delivered_files[:30]
         )
         if len(delivered_files) > 30:
@@ -73,6 +82,29 @@ def build_html_report(city: str, project_name: str, full_name: str,
           </div>
           <div class="section-content">
             <table class="doc-table">{delivered_rows}</table>
+          </div>
+        </div>"""
+
+    # ПОДЛОЖКИ секция
+    podlozhki_html = ""
+    if podlozhki_files:
+        podlozhki_rows = "".join(
+            f'<tr>'
+            f'<td>{"<a href=\"" + f["web_url"] + "\" target=\"_blank\" rel=\"noopener\">" if f.get("web_url") else ""}'
+            f'📐 {f["name"]}'
+            f'{"</a>" if f.get("web_url") else ""}'
+            f'</td>'
+            f'<td class="date">{f["date"][:10] if len(f["date"]) > 10 else f["date"]}</td>'
+            f'</tr>'
+            for f in podlozhki_files
+        )
+        podlozhki_html = f"""
+        <div class="card-section collapsible">
+          <div class="section-title" onclick="toggleSection(this)">
+            📐 ПОДЛОЖКИ ({len(podlozhki_files)}) <span class="toggle-icon">▼</span>
+          </div>
+          <div class="section-content">
+            <table class="doc-table">{podlozhki_rows}</table>
           </div>
         </div>"""
 
@@ -141,5 +173,6 @@ def build_html_report(city: str, project_name: str, full_name: str,
       <table class="doc-table">{all_doc_rows}</table>
     </div>
     {delivered_html}
+    {podlozhki_html}
   </div>
 </div>"""

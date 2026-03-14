@@ -137,6 +137,7 @@ def _build_full_html(report: dict, year: str, city: str | None) -> str:
                     "visa_files": [], "skica_files": [],
                     "stanovishte_files": [], "other_files": [],
                 }),
+                podlozhki_files    = p.get("podlozhki_files", []),
             )
             parts.append(html)
         except Exception as exc:
