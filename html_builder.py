@@ -71,7 +71,7 @@ def build_html_report(city: str, project_name: str, full_name: str,
           <div class="section-title" onclick="toggleSection(this)">
             📁 Всички файлове в ПРЕДАДЕНИ ({len(delivered_files)}) <span class="toggle-icon">▼</span>
           </div>
-          <div class="section-content" style="display:none">
+          <div class="section-content">
             <table class="doc-table">{delivered_rows}</table>
           </div>
         </div>"""
@@ -109,7 +109,7 @@ def build_html_report(city: str, project_name: str, full_name: str,
     <div class="card-meta">{city} · {check_time}</div>
     <div class="card-path">{project_path}</div>
   </div>
-  <div class="card-body" style="display:none">
+  <div class="card-body">
     <div class="card-section">
       <table class="info-table">
         <tr>
