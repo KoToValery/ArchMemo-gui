@@ -299,7 +299,8 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .collapsible .section-title:hover { color: var(--accent); }
   .toggle-icon { font-size: 10px; transition: transform .2s; }
   .toggle-icon.open { transform: rotate(-180deg); }
-  .section-content { margin-top: 10px; }
+  .section-content { margin-top: 10px; display: none; }
+  .section-content.open { display: block; }
 
   /* ── Log panel ── */
   .log-toggle { margin: 0 12px 8px; }
@@ -338,7 +339,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   <form id="checkForm" onsubmit="startCheck(event)">
     <div class="form-row">
       <div class="form-group">
-        <label>Година</label>
+        <label for="year">Година</label>
         <select id="year" name="year" required>
           <option value="2024" {{ 'selected' if current_year == '2024' else '' }}>2024</option>
           <option value="2025" {{ 'selected' if current_year == '2025' else '' }}>2025</option>
@@ -346,7 +347,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
         </select>
       </div>
       <div class="form-group">
-        <label>Град</label>
+        <label for="city">Град</label>
         <select id="city" name="city">
           <option value="">Всички градове</option>
           <option value="БЛАГОЕВГРАД">БЛАГОЕВГРАД</option>
@@ -467,10 +468,6 @@ function pollStatus() {
       const html = d.report_html || '';
       const resultsEl = document.getElementById('results');
       resultsEl.innerHTML = html;
-      // Reinitialize collapsible sections after innerHTML update
-      resultsEl.querySelectorAll('.section-content').forEach(el => {
-        el.style.display = 'none';
-      });
     }
   }).catch(err => {
     console.error('Poll error:', err);
@@ -506,13 +503,8 @@ function escHtml(s) {
 function toggleSection(el) {
   const content = el.nextElementSibling;
   const icon = el.querySelector('.toggle-icon');
-  if (content.style.display === 'none') {
-    content.style.display = 'block';
-    icon.classList.add('open');
-  } else {
-    content.style.display = 'none';
-    icon.classList.remove('open');
-  }
+  content.classList.toggle('open');
+  icon.classList.toggle('open');
 }
 
 function toggleProject(header) {
