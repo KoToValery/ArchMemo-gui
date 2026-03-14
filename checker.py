@@ -22,7 +22,7 @@ sys.path.insert(0, '/home/koto/onedrive-env/lib/python3.14/site-packages')
 # ─── Config ────────────────────────────────────────────────────────────────────
 CLIENT_ID  = "14d82eec-204b-4c2f-b7e8-296a70dab67e"
 AUTHORITY  = "https://login.microsoftonline.com/common"
-SCOPES     = ["User.Read", "Files.Read"]
+SCOPES     = ["User.Read", "Files.Read", "Files.ReadWrite"]
 CACHE_FILE = os.path.expanduser("~/.onedrive_business_token_cache.json")
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
@@ -94,7 +94,8 @@ class ProjectChecker:
         self.send_email_flag = send_email
         self.token           = None
         self.headers         = None
-        self.last_request_ts = 0.0
+        self.last_request_ts    = 0.0
+        self._sharing_link_cache = {}
         self.smtp_password   = None
         self._load_smtp_password()
         self.report = {
@@ -172,6 +173,39 @@ class ProjectChecker:
                 log.error("Грешка при GET %s: %s", url, exc)
                 return None
         return None
+
+    def _post(self, url: str, body: dict, timeout: int = 30) -> requests.Response | None:
+        elapsed = time.time() - self.last_request_ts
+        if elapsed < REQUEST_DELAY:
+            time.sleep(REQUEST_DELAY - elapsed)
+        try:
+            resp = requests.post(url, headers={**self.headers, "Content-Type": "application/json"},
+                                 json=body, timeout=timeout)
+            self.last_request_ts = time.time()
+            return resp
+        except Exception as exc:
+            log.error("Грешка при POST %s: %s", url, exc)
+            return None
+
+    def _get_sharing_link(self, item_id: str) -> str:
+        """Връща anonymous view link за файл. Кешира резултата."""
+        if item_id in self._sharing_link_cache:
+            return self._sharing_link_cache[item_id]
+        url  = f"{GRAPH_BASE}/me/drive/items/{item_id}/createLink"
+        resp = self._post(url, {"type": "view", "scope": "anonymous"})
+        if resp is not None and resp.status_code in (200, 201):
+            link = resp.json().get("link", {}).get("webUrl", "")
+            self._sharing_link_cache[item_id] = link
+            return link
+        # Fallback: organization scope (за business акаунти с забранени anonymous links)
+        resp = self._post(url, {"type": "view", "scope": "organization"})
+        if resp is not None and resp.status_code in (200, 201):
+            link = resp.json().get("link", {}).get("webUrl", "")
+            self._sharing_link_cache[item_id] = link
+            return link
+        log.warning("Не може да се генерира sharing link за item %s", item_id)
+        self._sharing_link_cache[item_id] = ""
+        return ""
 
     def get_folder_items(self, path: str) -> list[dict]:
         encoded = quote(path)
@@ -271,7 +305,12 @@ class ProjectChecker:
         # ПОДЛОЖКИ — dwg файлове в РАБОТНИ/ПОДЛОЖКИ
         podlozhki_items = self.get_folder_items(f"{project_path}/CAD/АРХИТЕКТУРА/РАБОТНИ/ПОДЛОЖКИ")
         podlozhki_files = [
-            {"name": i["name"], "date": self._item_date(i).isoformat(), "web_url": i.get("webUrl", "")}
+            {
+                "name":    i["name"],
+                "date":    self._item_date(i).isoformat(),
+                "item_id": i.get("id", ""),
+                "web_url": "",
+            }
             for i in podlozhki_items
             if "folder" not in i and i.get("name", "").lower().endswith(".dwg")
         ]
@@ -295,12 +334,14 @@ class ProjectChecker:
 
         outdated_arch = []
         for item in delivered_files:
-            fd   = self._item_date(item)
-            name = item["name"]
+            fd      = self._item_date(item)
+            name    = item["name"]
+            item_id = item.get("id", "")
             project_report["delivered_files"].append({
                 "name":    name,
                 "date":    fd.isoformat(),
-                "web_url": item.get("webUrl", ""),
+                "item_id": item_id,
+                "web_url": "",
             })
             if fd < pln_date:
                 outdated_arch.append(f"{name} ({fd.strftime('%d.%m.%Y')})")
@@ -400,7 +441,22 @@ class ProjectChecker:
         return project_report
 
     def scan_location(self, location_path: str, location_name: str, parent: str = ""):
+        # Пропускай папки съдържащи ПУП или PUP в името
+        if "ПУП" in location_name.upper() or "PUP" in location_name.upper():
+            log.info("⏭ Пропускам ПУП папка: %s", location_name)
+            self.report["skipped_locations"].append({"path": location_path, "reason": "ПУП/PUP папка"})
+            return
         if self.has_cad_folder(location_path):
+            # Пропускай проекти без файлове в ПОДЛОЖКИ
+            podlozhki_items = self.get_folder_items(f"{location_path}/CAD/АРХИТЕКТУРА/РАБОТНИ/ПОДЛОЖКИ")
+            has_podlozhki = any(
+                "folder" not in i and i.get("name", "").lower().endswith(".dwg")
+                for i in podlozhki_items
+            )
+            if not has_podlozhki:
+                log.info("⏭ Пропускам проект без ПОДЛОЖКИ: %s", location_name)
+                self.report["skipped_locations"].append({"path": location_path, "reason": "Няма dwg в ПОДЛОЖКИ"})
+                return
             project = self.check_project(location_path, location_name, parent)
             self.report["projects"].append(project)
             return
@@ -427,10 +483,9 @@ class ProjectChecker:
             for city_item in cities:
                 self.scan_location(f"{year_path}/{city_item['name']}", city_item["name"])
 
-        # Запис на JSON
-        timestamp   = datetime.now().strftime("%Y%m%d_%H%M%S")
-        label       = self.city.lower() if self.city else f"all_{self.year}"
-        report_file = os.path.join(OUTPUT_DIR, f"{label}_{timestamp}.json")
+        # Запис на JSON — фиксирано име за лесно зареждане при рестарт
+        label       = f"{self.year}_{self.city.lower() if self.city else 'all'}"
+        report_file = os.path.join(OUTPUT_DIR, f"cache_{label}.json")
         with open(report_file, "w", encoding="utf-8") as f:
             json.dump(self.report, f, ensure_ascii=False, indent=2)
         self.report["report_file"] = report_file

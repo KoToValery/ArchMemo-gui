@@ -1,6 +1,22 @@
-"""HTML генератор за рапорта — използва се и от уеб интерфейса, и за имейл."""
+"""HTML генератор за рапорта."""
 
 from datetime import datetime
+
+
+def _file_row(f: dict, icon: str = "") -> str:
+    """Генерира таблична редица с lazy share link бутон."""
+    name    = f.get("name", "")
+    date    = f.get("date", "")[:10]
+    item_id = f.get("item_id", "")
+    # Ако вече имаме генериран линк — директен anchor
+    web_url = f.get("web_url", "")
+    if web_url:
+        link_cell = f'<a href="{web_url}" target="_blank" rel="noopener">🔗 Отвори</a>'
+    elif item_id:
+        link_cell = f'<button class="link-btn" onclick="getShareLink(this,\'{item_id}\')">🔗 Линк</button>'
+    else:
+        link_cell = ''
+    return f'<tr><td>{icon}{name}</td><td class="date">{date}</td><td>{link_cell}</td></tr>'
 
 
 def build_html_report(city: str, project_name: str, full_name: str,
@@ -10,12 +26,15 @@ def build_html_report(city: str, project_name: str, full_name: str,
                       specialties_rows: list, specialties_detail: dict,
                       project_path: str,
                       stanovishta: dict,
-                      podlozhki_files: list = None) -> str:
+                      podlozhki_files: list = None,
+                      project_id: str = "",
+                      is_hidden: bool = False) -> str:
     check_time = datetime.now().strftime("%d.%m.%Y %H:%M")
     if podlozhki_files is None:
         podlozhki_files = []
+    pid = project_id or project_path
 
-    # Статус на архитектура
+    # Статус архитектура
     if outdated_arch:
         arch_status_html = f'<span class="badge badge-warn">СТАРИ ({len(outdated_arch)})</span>'
     elif delivered_count > 0:
@@ -23,28 +42,22 @@ def build_html_report(city: str, project_name: str, full_name: str,
     else:
         arch_status_html = '<span class="badge badge-err">ЛИПСВАТ</span>'
 
-    # Таблица на специалности с текстови статуси
+    # Специалности
     spec_rows_html = ""
     for row in specialties_rows:
         if row["status"] == "ok":
-            status_text = "АКТУАЛНИ"
-            cls = "ok"
+            status_text, cls = "АКТУАЛНИ", "ok"
             detail = f'{row["files_count"]} файла · {row["latest_date"]}'
         elif row["status"] == "outdated":
-            status_text = "СТАРИ"
-            cls = "warn"
+            status_text, cls = "СТАРИ", "warn"
             detail = f'Последен: {row["latest_date"]}'
         else:
-            status_text = "ЛИПСВАТ"
-            cls = "err"
+            status_text, cls = "ЛИПСВАТ", "err"
             detail = "Няма файлове"
-        
-        # Детайли за специалността
         spec_name = row.get("folder_name", row["label"])
         spec_info = specialties_detail.get(spec_name, {})
         if isinstance(spec_info, dict) and "latest_file" in spec_info:
             detail += f'<br><small style="color:#95a5a6">📄 {spec_info["latest_file"]}</small>'
-        
         spec_rows_html += f"""
         <tr>
           <td>{row['label']}</td>
@@ -52,63 +65,48 @@ def build_html_report(city: str, project_name: str, full_name: str,
           <td class="detail">{detail}</td>
         </tr>"""
 
-    # Остарели архитектурни файлове
+    # Остарели
     outdated_html = ""
     if outdated_arch:
         items = "".join(f"<li>{f}</li>" for f in outdated_arch[:20])
         if len(outdated_arch) > 20:
             items += f"<li><em>... и още {len(outdated_arch)-20}</em></li>"
-        outdated_html = f'<div class="outdated-list"><strong>⚠ Остарели архитектурни файлове в ПРЕДАДЕНИ:</strong><ul>{items}</ul></div>'
+        outdated_html = (f'<div class="outdated-list"><strong>⚠ Остарели архитектурни файлове '
+                         f'в ПРЕДАДЕНИ:</strong><ul>{items}</ul></div>')
 
-    # Всички файлове в ПРЕДАДЕНИ
+    # ПРЕДАДЕНИ
     delivered_html = ""
     if delivered_files:
-        delivered_rows = "".join(
-            f'<tr>'
-            f'<td>{"<a href=\"" + f["web_url"] + "\" target=\"_blank\" rel=\"noopener\">" if f.get("web_url") else ""}'
-            f'{f["name"]}'
-            f'{"</a>" if f.get("web_url") else ""}'
-            f'</td>'
-            f'<td class="date">{f["date"][:10] if len(f["date"]) > 10 else f["date"]}</td>'
-            f'</tr>'
-            for f in delivered_files[:30]
-        )
+        rows = "".join(_file_row(f) for f in delivered_files[:30])
         if len(delivered_files) > 30:
-            delivered_rows += f'<tr><td colspan="2" class="empty"><em>... и още {len(delivered_files)-30} файла</em></td></tr>'
+            rows += f'<tr><td colspan="3" class="empty"><em>... и още {len(delivered_files)-30} файла</em></td></tr>'
         delivered_html = f"""
         <div class="card-section collapsible">
           <div class="section-title" onclick="toggleSection(this)">
             📁 Всички файлове в ПРЕДАДЕНИ ({len(delivered_files)}) <span class="toggle-icon">▼</span>
           </div>
           <div class="section-content">
-            <table class="doc-table">{delivered_rows}</table>
+            <table class="doc-table"><thead><tr><th>Файл</th><th>Дата</th><th></th></tr></thead>
+            <tbody>{rows}</tbody></table>
           </div>
         </div>"""
 
-    # ПОДЛОЖКИ секция
+    # ПОДЛОЖКИ
     podlozhki_html = ""
     if podlozhki_files:
-        podlozhki_rows = "".join(
-            f'<tr>'
-            f'<td>{"<a href=\"" + f["web_url"] + "\" target=\"_blank\" rel=\"noopener\">" if f.get("web_url") else ""}'
-            f'📐 {f["name"]}'
-            f'{"</a>" if f.get("web_url") else ""}'
-            f'</td>'
-            f'<td class="date">{f["date"][:10] if len(f["date"]) > 10 else f["date"]}</td>'
-            f'</tr>'
-            for f in podlozhki_files
-        )
+        rows = "".join(_file_row(f, "📐 ") for f in podlozhki_files)
         podlozhki_html = f"""
         <div class="card-section collapsible">
           <div class="section-title" onclick="toggleSection(this)">
             📐 ПОДЛОЖКИ ({len(podlozhki_files)}) <span class="toggle-icon">▼</span>
           </div>
           <div class="section-content">
-            <table class="doc-table">{podlozhki_rows}</table>
+            <table class="doc-table"><thead><tr><th>Файл</th><th>Дата</th><th></th></tr></thead>
+            <tbody>{rows}</tbody></table>
           </div>
         </div>"""
 
-    # Становища и виза - с проверка за липсващи ключове
+    # Становища
     def _doc_rows(files, badge, cls):
         return "".join(
             f'<tr><td><span class="badge badge-{cls}">{badge}</span> {f["name"]}</td>'
@@ -116,11 +114,10 @@ def build_html_report(city: str, project_name: str, full_name: str,
             for f in files
         )
 
-    visa_status = stanovishta.get("visa_status", "missing")
+    visa_status  = stanovishta.get("visa_status", "missing")
     skica_status = stanovishta.get("skica_status", "missing")
-    
-    visa_badge  = '<span class="badge badge-ok">НАМЕРЕНА</span>' if visa_status == "found" else '<span class="badge badge-err">ЛИПСВА</span>'
-    skica_badge = '<span class="badge badge-ok">НАМЕРЕНА</span>' if skica_status == "found" else '<span class="badge badge-err">ЛИПСВА</span>'
+    visa_badge   = '<span class="badge badge-ok">НАМЕРЕНА</span>' if visa_status == "found" else '<span class="badge badge-err">ЛИПСВА</span>'
+    skica_badge  = '<span class="badge badge-ok">НАМЕРЕНА</span>' if skica_status == "found" else '<span class="badge badge-err">ЛИПСВА</span>'
 
     all_doc_rows = (
         _doc_rows(stanovishta.get("visa_files", []),        "ВИЗА",      "info") +
@@ -131,12 +128,16 @@ def build_html_report(city: str, project_name: str, full_name: str,
     if not all_doc_rows:
         all_doc_rows = '<tr><td colspan="2" class="empty">Папката е празна или не съществува</td></tr>'
 
+    hidden_cls  = " hidden-card" if is_hidden else ""
+    pid_escaped = pid.replace('"', '&quot;')
+
     return f"""
-<div class="project-card collapsed">
+<div class="project-card collapsed{hidden_cls}" data-pid="{pid_escaped}">
   <div class="card-header" onclick="toggleProject(this)">
     <div class="card-title-row">
       <span class="toggle-icon">▶</span>
       <div class="card-title">🏗 {full_name}</div>
+      <button class="hide-btn" onclick="toggleHide(event,'{pid_escaped}')" title="Скрий/Покажи">👁</button>
     </div>
     <div class="card-meta">{city} · {check_time}</div>
     <div class="card-path">{project_path}</div>
