@@ -25,13 +25,14 @@ app = Flask(__name__)
 
 # Глобален стейт
 state = {
-    "running":      False,
-    "last_report":  None,
-    "last_run":     None,
-    "last_html":    "",
-    "last_year":    str(__import__('datetime').datetime.now().year),
-    "last_city":    None,
-    "log_lines":    [],
+    "running":       False,
+    "last_report":   None,
+    "last_run":      None,
+    "last_html":     "",
+    "last_year":     str(__import__('datetime').datetime.now().year),
+    "last_city":     None,
+    "log_lines":     [],
+    "report_cache":  [],  # История на рапорти [{timestamp, year, city, html, summary}, ...]
 }
 
 MAX_LOG_LINES = 200
@@ -69,8 +70,29 @@ def run_check(year: str, city: str | None, send_email: bool = False):
         state["last_year"]   = year
         state["last_city"]   = city
         log.info("📊 Генериране на HTML рапорт за %d проекта...", len(report.get("projects", [])))
-        state["last_html"]   = _build_full_html(report, year, city)
-        log.info("✅ Проверката завърши. HTML: %d chars", len(state["last_html"]))
+        html = _build_full_html(report, year, city)
+        state["last_html"] = html
+        
+        # Запазване в кеш
+        projects = report.get("projects", [])
+        total  = len(projects)
+        ok     = sum(1 for p in projects if p.get("status") == "Актуален")
+        issues = sum(1 for p in projects if p.get("status") == "Има проблеми")
+        errors = len(report.get("errors", []))
+        
+        cache_entry = {
+            "timestamp": state["last_run"],
+            "year": year,
+            "city": city or "Всички",
+            "html": html,
+            "summary": {"total": total, "ok": ok, "issues": issues, "errors": errors}
+        }
+        state["report_cache"].insert(0, cache_entry)
+        # Пази само последните 20 рапорта
+        if len(state["report_cache"]) > 20:
+            state["report_cache"] = state["report_cache"][:20]
+        
+        log.info("✅ Проверката завърши. HTML: %d chars", len(html))
     except Exception as exc:
         log.error("❌ Грешка при проверка: %s", exc, exc_info=True)
         state["last_html"] = f'<div class="no-results">❌ Грешка: {exc}</div>'
@@ -184,6 +206,25 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .btn-secondary { background: #ecf0f1; color: var(--text); }
   .btn:disabled { opacity: .5; cursor: not-allowed; }
 
+  /* ── Cache list ── */
+  .cache-wrap { background: var(--card); padding: 12px 16px; margin: 0 12px 12px;
+                border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+  .cache-title { font-size: 13px; font-weight: 600; color: var(--muted);
+                 margin-bottom: 8px; text-transform: uppercase; letter-spacing: .5px; }
+  .cache-list { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+  .cache-item { min-width: 140px; padding: 10px 12px; background: #f8f9fa;
+                border-radius: 7px; cursor: pointer; transition: all .2s;
+                border: 2px solid transparent; }
+  .cache-item:hover { background: #e9ecef; border-color: var(--accent); }
+  .cache-time { font-size: 11px; color: var(--muted); font-weight: 600; }
+  .cache-info { font-size: 13px; color: var(--text); margin: 4px 0; }
+  .cache-summary { display: flex; gap: 6px; margin-top: 6px; }
+  .cache-badge { display: inline-block; padding: 2px 6px; border-radius: 4px;
+                 font-size: 11px; font-weight: 700; color: #fff; }
+  .cache-badge.ok { background: var(--ok); }
+  .cache-badge.warn { background: var(--warn); }
+  .cache-badge.err { background: var(--err); }
+
   /* ── Status bar ── */
   .status-bar { margin: 0 12px 8px; padding: 10px 14px; border-radius: 8px;
                 font-size: 13px; display: none; }
@@ -207,14 +248,23 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .results { padding: 0 12px 24px; }
   .project-card { background: var(--card); border-radius: 10px; margin-bottom: 14px;
                   box-shadow: 0 1px 4px rgba(0,0,0,.1); overflow: hidden; }
-  .card-header { background: var(--header); padding: 14px 16px; }
+  .card-header { background: var(--header); padding: 14px 16px; cursor: pointer;
+                 user-select: none; transition: background .2s; }
+  .card-header:hover { background: #34495e; }
+  .card-title-row { display: flex; align-items: center; gap: 10px; }
+  .card-title-row .toggle-icon { font-size: 12px; transition: transform .2s;
+                                  color: #bdc3c7; min-width: 12px; }
+  .project-card:not(.collapsed) .card-header .toggle-icon { transform: rotate(90deg); }
   .card-title  { color: #fff; font-size: 15px; font-weight: 600; }
   .card-meta   { color: #bdc3c7; font-size: 12px; margin-top: 3px; }
   .card-path   { color: #95a5a6; font-size: 11px; margin-top: 2px; word-break: break-all; }
+  .card-body   { display: none; }
+  .project-card:not(.collapsed) .card-body { display: block; }
   .card-section { padding: 14px 16px; border-top: 1px solid var(--border); }
   .section-title { font-weight: 600; font-size: 13px; color: var(--muted);
                    text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; }
-  .status-only .card-header { background: #636e72; }
+  .status-only .card-header { background: #636e72; cursor: default; }
+  .status-only .card-header:hover { background: #636e72; }
 
   /* ── Tables ── */
   .info-table, .spec-table, .doc-table {
@@ -318,6 +368,25 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     </div>
   </form>
 </div>
+
+{% if report_cache %}
+<div class="cache-wrap">
+  <div class="cache-title">📚 Предишни рапорти</div>
+  <div class="cache-list">
+    {% for entry in report_cache %}
+    <div class="cache-item" onclick="loadCachedReport({{ loop.index0 }})">
+      <div class="cache-time">{{ entry.timestamp }}</div>
+      <div class="cache-info">{{ entry.year }} / {{ entry.city }}</div>
+      <div class="cache-summary">
+        <span class="cache-badge ok">{{ entry.summary.ok }}</span>
+        <span class="cache-badge warn">{{ entry.summary.issues }}</span>
+        <span class="cache-badge err">{{ entry.summary.errors }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
 
 <div class="status-bar" id="statusBar"></div>
 
@@ -446,6 +515,31 @@ function toggleSection(el) {
   }
 }
 
+function toggleProject(header) {
+  const card = header.closest('.project-card');
+  card.classList.toggle('collapsed');
+}
+
+function loadCachedReport(index) {
+  fetch('/cache/' + index).then(r => r.json()).then(d => {
+    if (d.html) {
+      document.getElementById('results').innerHTML = d.html;
+      document.getElementById('lastRun').textContent = d.timestamp;
+      if (d.summary) {
+        document.getElementById('sumTotal').textContent  = d.summary.total;
+        document.getElementById('sumOk').textContent     = d.summary.ok;
+        document.getElementById('sumIssues').textContent = d.summary.issues;
+        document.getElementById('sumErrors').textContent = d.summary.errors;
+        document.getElementById('summary').style.display = '';
+      }
+      setStatus('done', '📚 Зареден рапорт от ' + d.timestamp);
+    }
+  }).catch(err => {
+    console.error('Cache load error:', err);
+    setStatus('done', '❌ Грешка при зареждане на рапорт');
+  });
+}
+
 // При зареждане на страницата — ако има готов рапорт, зареди го
 window.addEventListener('DOMContentLoaded', function() {
   {% if running %}
@@ -478,6 +572,7 @@ def index():
         last_run     = state["last_run"] or "",
         report_html  = state["last_html"],
         running      = state["running"],
+        report_cache = state["report_cache"],
         total=total, ok=ok, issues=issues, errors=errors,
     )
 
@@ -525,8 +620,24 @@ def debug_endpoint():
         "projects_count": len(projects),
         "projects_names": [p.get("name","?") for p in projects[:10]],
         "errors":         report.get("errors", []),
+        "cache_count":    len(state["report_cache"]),
     }
     return jsonify(info)
+
+
+@app.route("/cache/<int:index>")
+def cache_endpoint(index):
+    """Връща кеширан рапорт по индекс."""
+    if 0 <= index < len(state["report_cache"]):
+        entry = state["report_cache"][index]
+        return jsonify({
+            "timestamp": entry["timestamp"],
+            "year":      entry["year"],
+            "city":      entry["city"],
+            "html":      entry["html"],
+            "summary":   entry["summary"],
+        })
+    return jsonify({"error": "Invalid index"}), 404
 
 
 # ─── Entry point ──────────────────────────────────────────────────────────────
