@@ -51,7 +51,7 @@ KNOWN_SPECIALTIES = {
 }
 BASE_EXTS = (".dwg", ".pdf")
 
-_VISA_KEYWORDS    = ("виза", "viza", "visa")
+_VISA_KEYWORDS    = ("виза", "визи", "viza", "visa")
 _SKICA_KEYWORDS   = ("скица", "skica", "sketch", "скетч")
 _STANOVISHTE_KEYWORDS = (
     "становище", "stanovishte", "становища", "ERM", "zapad", "vik",
@@ -225,8 +225,7 @@ class ProjectChecker:
     def _item_date(item: dict) -> datetime:
         raw = item.get("lastModifiedDateTime", "2000-01-01T00:00:00Z")
         try:
-            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-            return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
         except ValueError:
             return datetime(2000, 1, 1, tzinfo=timezone.utc)
 
@@ -260,9 +259,7 @@ class ProjectChecker:
         for item in items:
             name = item.get("name", "")
             if "folder" in item:
-                sub_items = self.get_folder_items(f"{spec_path}/{name}")
-                files += [s for s in sub_items
-                          if "folder" not in s and s.get("name", "").lower().endswith(exts)]
+                files += self._collect_spec_files(f"{spec_path}/{name}", extra_exts)
             elif name.lower().endswith(exts):
                 files.append(item)
         return files
@@ -302,8 +299,11 @@ class ProjectChecker:
         project_report["pln_name"]      = latest_pln["name"]
         project_report["pln_date_str"]  = pln_date_str
 
-        # ПОДЛОЖКИ — dwg файлове в РАБОТНИ/ПОДЛОЖКИ
-        podlozhki_items = self.get_folder_items(f"{project_path}/CAD/АРХИТЕКТУРА/РАБОТНИ/ПОДЛОЖКИ")
+        # ПОДЛОЖКИ — dwg файлове в РАБОТНИ/ПОДЛОЖКИ (рекурсивно в подпапки), последните 10 по дата
+        podlozhki_root  = f"{project_path}/CAD/АРХИТЕКТУРА/РАБОТНИ/ПОДЛОЖКИ"
+        podlozhki_raw   = self._collect_spec_files(podlozhki_root, ())  # само .dwg (BASE_EXTS)
+        podlozhki_dwg   = [i for i in podlozhki_raw if i.get("name", "").lower().endswith(".dwg")]
+        podlozhki_dwg.sort(key=self._item_date, reverse=True)
         podlozhki_files = [
             {
                 "name":    i["name"],
@@ -311,8 +311,7 @@ class ProjectChecker:
                 "item_id": i.get("id", ""),
                 "web_url": "",
             }
-            for i in podlozhki_items
-            if "folder" not in i and i.get("name", "").lower().endswith(".dwg")
+            for i in podlozhki_dwg[:10]
         ]
         project_report["podlozhki_files"] = podlozhki_files
 
@@ -444,15 +443,11 @@ class ProjectChecker:
         # Пропускай папки съдържащи ПУП или PUP в името
         if "ПУП" in location_name.upper() or "PUP" in location_name.upper():
             log.info("⏭ Пропускам ПУП папка: %s", location_name)
-            self.report["skipped_locations"].append({"path": location_path, "reason": "ПУП/PUP папка"})
-            return
         if self.has_cad_folder(location_path):
-            # Пропускай проекти без файлове в ПОДЛОЖКИ
-            podlozhki_items = self.get_folder_items(f"{location_path}/CAD/АРХИТЕКТУРА/РАБОТНИ/ПОДЛОЖКИ")
-            has_podlozhki = any(
-                "folder" not in i and i.get("name", "").lower().endswith(".dwg")
-                for i in podlozhki_items
-            )
+            # Пропускай проекти без файлове в ПОДЛОЖКИ (рекурсивно)
+            podlozhki_root  = f"{location_path}/CAD/АРХИТЕКТУРА/РАБОТНИ/ПОДЛОЖКИ"
+            podlozhki_raw   = self._collect_spec_files(podlozhki_root, ())
+            has_podlozhki   = any(i.get("name", "").lower().endswith(".dwg") for i in podlozhki_raw)
             if not has_podlozhki:
                 log.info("⏭ Пропускам проект без ПОДЛОЖКИ: %s", location_name)
                 self.report["skipped_locations"].append({"path": location_path, "reason": "Няма dwg в ПОДЛОЖКИ"})
