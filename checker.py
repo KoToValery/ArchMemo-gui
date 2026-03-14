@@ -440,21 +440,36 @@ class ProjectChecker:
         return project_report
 
     def scan_location(self, location_path: str, location_name: str, parent: str = ""):
-        # Пропускай папки съдържащи ПУП или PUP в името
+        # 1. Пропусни ако името съдържа ПУП или PUP
         if "ПУП" in location_name.upper() or "PUP" in location_name.upper():
             log.info("⏭ Пропускам ПУП папка: %s", location_name)
+            return
+
         if self.has_cad_folder(location_path):
-            # Пропускай проекти без файлове в ПОДЛОЖКИ (рекурсивно)
-            podlozhki_root  = f"{location_path}/CAD/АРХИТЕКТУРА/РАБОТНИ/ПОДЛОЖКИ"
-            podlozhki_raw   = self._collect_spec_files(podlozhki_root, ())
-            has_podlozhki   = any(i.get("name", "").lower().endswith(".dwg") for i in podlozhki_raw)
-            if not has_podlozhki:
-                log.info("⏭ Пропускам проект без ПОДЛОЖКИ: %s", location_name)
-                self.report["skipped_locations"].append({"path": location_path, "reason": "Няма dwg в ПОДЛОЖКИ"})
+            # 2. Пропусни ако няма файлове и в двете папки (ПОДЛОЖКИ и ПРЕДАДЕНИ)
+            podlozhki_root = f"{location_path}/CAD/АРХИТЕКТУРА/РАБОТНИ/ПОДЛОЖКИ"
+            predadeni_root = f"{location_path}/CAD/АРХИТЕКТУРА/ПРЕДАДЕНИ"
+            
+            # Търсим .dwg в ПОДЛОЖКИ (рекурсивно)
+            podlozhki_files = self._collect_spec_files(podlozhki_root, ())
+            has_podlozhki = any(i.get("name", "").lower().endswith(".dwg") for i in podlozhki_files)
+            
+            # Търсим .dwg/.pdf в ПРЕДАДЕНИ (рекурсивно)
+            predadeni_files = self._collect_spec_files(predadeni_root, ())
+            has_predadeni = any(i.get("name", "").lower().endswith(BASE_EXTS) for i in predadeni_files)
+            
+            if not has_podlozhki and not has_predadeni:
+                log.info("⏭ Пропускам проект без файлове в ПОДЛОЖКИ и ПРЕДАДЕНИ: %s", location_name)
+                self.report["skipped_locations"].append({
+                    "path": location_path, 
+                    "reason": "Няма файлове в ПОДЛОЖКИ и ПРЕДАДЕНИ"
+                })
                 return
+            
             project = self.check_project(location_path, location_name, parent)
             self.report["projects"].append(project)
             return
+
         items      = self.get_folder_items(location_path)
         subfolders = [i for i in items if "folder" in i]
         if not subfolders:
