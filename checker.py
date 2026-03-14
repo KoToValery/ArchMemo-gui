@@ -49,13 +49,13 @@ KNOWN_SPECIALTIES = {
     "ПБЗ":           {"label": "ПБЗ",              "extra_exts": (".doc", ".docx")},
     "ПУСО":          {"label": "ПУСО",             "extra_exts": (".doc", ".docx", ".xls", ".xlsx")},
 }
-BASE_EXTS = (".dwg", ".pdf")
+BASE_EXTS = (".dwg", ".jpg", ".pdf")
 
 _VISA_KEYWORDS    = ("виза", "визи", "viza", "visa")
-_SKICA_KEYWORDS   = ("скица", "skica", "sketch", "скетч")
+_SKICA_KEYWORDS   = ("скица", "skica", "skitsa", "sketch", "скетч")
 _STANOVISHTE_KEYWORDS = (
     "становище", "stanovishte", "становища", "ERM", "zapad", "vik",
-    "чез", "evn", "evi", "еви", "ел.разпр", "ел разпр",
+    "чез", "енерго", "energo", "izhodni", "evn", "evi", "еви", "ел.разпр", "ел разпр",
     "вик", "vik", "ЕРМ", "мрежи", "Запад", "stanoviste",
     "напоителни", "ЧЕЗ",
 )
