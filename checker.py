@@ -252,6 +252,7 @@ class ProjectChecker:
             "specialties_rows": [],
             "issues":          [],
             "stanovishta":     {},
+            "podlozhki_files": [],
         }
 
         rabotni_items = self.get_folder_items(f"{project_path}/CAD/АРХИТЕКТУРА/РАБОТНИ")
@@ -267,8 +268,24 @@ class ProjectChecker:
         project_report["pln_name"]      = latest_pln["name"]
         project_report["pln_date_str"]  = pln_date_str
 
-        predadeni_items = self.get_folder_items(f"{project_path}/CAD/АРХИТЕКТУРА/ПРЕДАДЕНИ")
-        delivered_files = [i for i in predadeni_items
+        # ПОДЛОЖКИ — dwg файлове в РАБОТНИ/ПОДЛОЖКИ
+        podlozhki_items = self.get_folder_items(f"{project_path}/CAD/АРХИТЕКТУРА/РАБОТНИ/ПОДЛОЖКИ")
+        podlozhki_files = [
+            {"name": i["name"], "date": self._item_date(i).isoformat(), "web_url": i.get("webUrl", "")}
+            for i in podlozhki_items
+            if "folder" not in i and i.get("name", "").lower().endswith(".dwg")
+        ]
+        project_report["podlozhki_files"] = podlozhki_files
+
+        predadeni_path  = f"{project_path}/CAD/АРХИТЕКТУРА/ПРЕДАДЕНИ"
+        predadeni_items = self.get_folder_items(predadeni_path)
+        # Включи и файлове от подпапка DWG
+        dwg_subfolder = next((i for i in predadeni_items
+                               if "folder" in i and i.get("name", "").upper() == "DWG"), None)
+        dwg_sub_items = self.get_folder_items(f"{predadeni_path}/DWG") if dwg_subfolder else []
+        all_predadeni = [i for i in predadeni_items if "folder" not in i] + dwg_sub_items
+
+        delivered_files = [i for i in all_predadeni
                            if i.get("name", "").lower().endswith((".dwg", ".pdf"))]
         if not delivered_files:
             project_report["status"] = "Няма файлове в Предадени"
@@ -280,7 +297,11 @@ class ProjectChecker:
         for item in delivered_files:
             fd   = self._item_date(item)
             name = item["name"]
-            project_report["delivered_files"].append({"name": name, "date": fd.isoformat()})
+            project_report["delivered_files"].append({
+                "name":    name,
+                "date":    fd.isoformat(),
+                "web_url": item.get("webUrl", ""),
+            })
             if fd < pln_date:
                 outdated_arch.append(f"{name} ({fd.strftime('%d.%m.%Y')})")
         project_report["outdated_arch"] = outdated_arch
@@ -369,6 +390,7 @@ class ProjectChecker:
                     specialties_detail = project_report["specialties"],
                     project_path       = project_path,
                     stanovishta        = project_report["stanovishta"],
+                    podlozhki_files    = project_report["podlozhki_files"],
                 )
                 subject = f"[{self.year}/{self.city or location}] {full_name} — проверка"
                 self.send_html_email(NOTIFY_EMAIL, subject, html_body)
