@@ -605,23 +605,25 @@ function pollStatus() {
   }).catch(err => console.error('Poll error:', err));
 }
 
-function loadFromCache(key) {
+function loadFromCache(key, updateDropdowns = true) {
   currentKey = key;
   document.querySelectorAll('.cache-item').forEach(el => el.classList.remove('active'));
   const ci = document.getElementById('ci-' + key);
   if (ci) {
     ci.classList.add('active');
-    // Синхронизирай селекторите с кликнатия запис
-    const y = ci.dataset.year;
-    const c = ci.dataset.city === 'ALL' ? '' : ci.dataset.city;
-    const yearSelect = document.getElementById('year');
-    const citySelect = document.getElementById('city');
-    
-    if (yearSelect.value !== y) {
-      yearSelect.value = y;
-      updateFilters(); // Обнови списъка с градове за тази година
+    if (updateDropdowns) {
+      // Синхронизирай селекторите с кликнатия запис
+      const y = ci.dataset.year;
+      const c = ci.dataset.city === 'ALL' ? '' : ci.dataset.city;
+      const yearSelect = document.getElementById('year');
+      const citySelect = document.getElementById('city');
+      
+      if (yearSelect.value !== y) {
+        yearSelect.value = y;
+        updateFilters(); // Обнови списъка с градове за тази година
+      }
+      citySelect.value = c;
     }
-    citySelect.value = c;
   }
 
   const showHidden = document.getElementById('showHidden').checked;
@@ -749,15 +751,15 @@ function autoLoadSelectedCache() {
   const allKey = `${year}_ALL`;
 
   if (document.getElementById(`ci-${exactKey}`)) {
-    loadFromCache(exactKey);
+    loadFromCache(exactKey, false);
     return;
   }
   if (!city && document.getElementById(`ci-${allKey}`)) {
-    loadFromCache(allKey);
+    loadFromCache(allKey, false);
     return;
   }
   if (city && document.getElementById(`ci-${allKey}`)) {
-    loadFromCache(allKey);
+    loadFromCache(allKey, false);
     return;
   }
   document.getElementById('results').innerHTML =
