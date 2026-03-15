@@ -429,7 +429,13 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   <div class="cache-title">📚 Налични данни (десен бутон за изтриване)</div>
   <div class="cache-list" id="cacheList">
     {% for key, entry in cache_entries %}
-    <div class="cache-item" id="ci-{{ key }}" onclick="loadFromCache('{{ key }}')" oncontextmenu="showContextMenu(event, '{{ key }}')">
+    <div class="cache-item"
+         id="ci-{{ key }}"
+         data-key="{{ key }}"
+         data-year="{{ entry.year }}"
+         data-city="{{ entry.city }}"
+         onclick="loadFromCache('{{ key }}')"
+         oncontextmenu="showContextMenu(event, '{{ key }}')">
       <div class="cache-time">{{ entry.timestamp }}</div>
       <div class="cache-info">{{ entry.year }} / {{ entry.city }}</div>
       <div class="cache-summary">
@@ -652,6 +658,14 @@ function getShareLink(btn, itemId) {
     }).catch(() => { btn.textContent = '❌'; btn.classList.remove('loading'); });
 }
 
+function getCacheItems() {
+  return Array.from(document.querySelectorAll('.cache-item')).map(el => ({
+    key: el.dataset.key,
+    year: el.dataset.year,
+    city: el.dataset.city
+  }));
+}
+
 function refreshCacheList(entries) {
   const list = document.getElementById('cacheList');
   if (!list) return;
@@ -665,47 +679,76 @@ function refreshCacheList(entries) {
       el.oncontextmenu = (e) => showContextMenu(e, key);
       list.appendChild(el);
     }
-    el.innerHTML = `<div class="cache-time">${entry.timestamp}</div>
-      <div class="cache-info">${entry.year} / ${entry.city}</div>
+    el.dataset.key = key;
+    el.dataset.year = entry.year;
+    el.dataset.city = entry.city;
+    el.innerHTML = `<div class="cache-time">\${entry.timestamp}</div>
+      <div class="cache-info">\${entry.year} / \${entry.city}</div>
       <div class="cache-summary">
-        <span class="cache-badge ok">${entry.summary.ok}</span>
-        <span class="cache-badge warn">${entry.summary.issues}</span>
-        <span class="cache-badge err">${entry.summary.errors}</span>
+        <span class="cache-badge ok">\${entry.summary.ok}</span>
+        <span class="cache-badge warn">\${entry.summary.issues}</span>
+        <span class="cache-badge err">\${entry.summary.errors}</span>
       </div>`;
   });
   updateFilters();
 }
 
 function updateFilters() {
-  const yearsSet = new Set(['2024', '2025', '2026']);
-  const citiesSet = new Set(['БЛАГОЕВГРАД', 'СОФИЯ', 'БАНСКО', 'РАЗЛОГ', 'САМОКОВ', 'КЮСТЕНДИЛ']);
-  
-  // Collect from current cache items
-  document.querySelectorAll('.cache-item').forEach(el => {
-    const info = el.querySelector('.cache-info').textContent;
-    const parts = info.split(' / ');
-    if (parts.length === 2) {
-      yearsSet.add(parts[0].trim());
-      if (parts[1].trim() !== 'ALL') citiesSet.add(parts[1].trim());
-    }
-  });
-
+  const items = getCacheItems();
   const yearSelect = document.getElementById('year');
   const citySelect = document.getElementById('city');
-  const currentYear = yearSelect.value;
-  const currentCity = citySelect.value;
 
-  // Update years
-  yearSelect.innerHTML = Array.from(yearsSet).sort().reverse().map(y => 
-    `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`
-  ).join('');
+  const currentYear = yearSelect.value || new Date().getFullYear().toString();
+  const currentCity = citySelect.value || '';
 
-  // Update cities
-  citySelect.innerHTML = '<option value="">Всички градове</option>' + 
-    Array.from(citiesSet).sort().map(c => 
-      `<option value="${c}" ${c === currentCity ? 'selected' : ''}>${c}</option>`
-    ).join('');
+  const years = [...new Set(items.map(i => i.year))].sort().reverse();
+  yearSelect.innerHTML = years
+    .map(y => `<option value="\${y}" \${y === currentYear ? 'selected' : ''}>\${y}</option>`)
+    .join('');
+
+  const selectedYear = yearSelect.value;
+  const cities = [...new Set(
+    items
+      .filter(i => i.year === selectedYear && i.city !== 'ALL')
+      .map(i => i.city)
+  )].sort();
+
+  const cityStillExists = cities.includes(currentCity);
+  citySelect.innerHTML =
+    '<option value="">Всички градове</option>' +
+    cities
+      .map(c => `<option value="\${c}" \${c === currentCity && cityStillExists ? 'selected' : ''}>\${c}</option>`)
+      .join('');
+
+  if (!cityStillExists) {
+    citySelect.value = '';
+  }
 }
+
+function autoLoadSelectedCache() {
+  const year = document.getElementById('year').value;
+  const city = document.getElementById('city').value;
+  const exactKey = `${year}_${(city || 'ALL').toUpperCase()}`;
+  const allKey = `${year}_ALL`;
+
+  if (document.getElementById(`ci-${exactKey}`)) {
+    loadFromCache(exactKey);
+    return;
+  }
+  if (!city && document.getElementById(`ci-${allKey}`)) {
+    loadFromCache(allKey);
+    return;
+  }
+  if (city && document.getElementById(`ci-${allKey}`)) {
+    loadFromCache(allKey);
+    return;
+  }
+  document.getElementById('results').innerHTML =
+    '<div class="no-results">Няма кеш за избраната комбинация.</div>';
+  document.getElementById('toolbar').style.display = 'none';
+  currentKey = null;
+}
+
 
 function setStatus(type, msg) {
   const bar = document.getElementById('statusBar');
@@ -751,9 +794,17 @@ window.addEventListener('DOMContentLoaded', function() {
   document.getElementById('fullScanBtn').disabled = true;
   setStatus('running', '<span class="spinner"></span> Проверката е в ход...');
   pollTimer = setInterval(pollStatus, 2000);
-  {% elif default_key %}
-  loadFromCache('{{ default_key }}');
+  {% else %}
+  autoLoadSelectedCache();
   {% endif %}
+
+  document.getElementById('year').addEventListener('change', function () {
+    updateFilters();
+    autoLoadSelectedCache();
+  });
+  document.getElementById('city').addEventListener('change', function () {
+    autoLoadSelectedCache();
+  });
 });
 </script>
 </body>
