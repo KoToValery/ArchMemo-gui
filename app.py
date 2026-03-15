@@ -609,7 +609,20 @@ function loadFromCache(key) {
   currentKey = key;
   document.querySelectorAll('.cache-item').forEach(el => el.classList.remove('active'));
   const ci = document.getElementById('ci-' + key);
-  if (ci) ci.classList.add('active');
+  if (ci) {
+    ci.classList.add('active');
+    // Синхронизирай селекторите с кликнатия запис
+    const y = ci.dataset.year;
+    const c = ci.dataset.city === 'ALL' ? '' : ci.dataset.city;
+    const yearSelect = document.getElementById('year');
+    const citySelect = document.getElementById('city');
+    
+    if (yearSelect.value !== y) {
+      yearSelect.value = y;
+      updateFilters(); // Обнови списъка с градове за тази година
+    }
+    citySelect.value = c;
+  }
 
   const showHidden = document.getElementById('showHidden').checked;
   fetch('/load_cache?key=' + encodeURIComponent(key) + '&show_hidden=' + showHidden)
@@ -682,12 +695,12 @@ function refreshCacheList(entries) {
     el.dataset.key = key;
     el.dataset.year = entry.year;
     el.dataset.city = entry.city;
-    el.innerHTML = `<div class="cache-time">\${entry.timestamp}</div>
-      <div class="cache-info">\${entry.year} / \${entry.city}</div>
+    el.innerHTML = `<div class="cache-time">${entry.timestamp}</div>
+      <div class="cache-info">${entry.year} / ${entry.city}</div>
       <div class="cache-summary">
-        <span class="cache-badge ok">\${entry.summary.ok}</span>
-        <span class="cache-badge warn">\${entry.summary.issues}</span>
-        <span class="cache-badge err">\${entry.summary.errors}</span>
+        <span class="cache-badge ok">${entry.summary.ok}</span>
+        <span class="cache-badge warn">${entry.summary.issues}</span>
+        <span class="cache-badge err">${entry.summary.errors}</span>
       </div>`;
   });
   updateFilters();
@@ -701,23 +714,27 @@ function updateFilters() {
   const currentYear = yearSelect.value || new Date().getFullYear().toString();
   const currentCity = citySelect.value || '';
 
-  const years = [...new Set(items.map(i => i.year))].sort().reverse();
+  // Винаги имаме 2024-2026 като базов набор, плюс каквото има в кеша
+  const yearsSet = new Set(['2024', '2025', '2026']);
+  items.forEach(i => yearsSet.add(i.year));
+  const years = Array.from(yearsSet).sort().reverse();
+  
   yearSelect.innerHTML = years
-    .map(y => `<option value="\${y}" \${y === currentYear ? 'selected' : ''}>\${y}</option>`)
+    .map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`)
     .join('');
 
   const selectedYear = yearSelect.value;
-  const cities = [...new Set(
-    items
-      .filter(i => i.year === selectedYear && i.city !== 'ALL')
-      .map(i => i.city)
-  )].sort();
+  const citiesSet = new Set(['БЛАГОЕВГРАД', 'СОФИЯ', 'БАНСКО', 'РАЗЛОГ', 'САМОКОВ', 'КЮСТЕНДИЛ']);
+  items
+    .filter(i => i.year === selectedYear && i.city !== 'ALL')
+    .forEach(i => citiesSet.add(i.city));
+  const cities = Array.from(citiesSet).sort();
 
   const cityStillExists = cities.includes(currentCity);
   citySelect.innerHTML =
     '<option value="">Всички градове</option>' +
     cities
-      .map(c => `<option value="\${c}" \${c === currentCity && cityStillExists ? 'selected' : ''}>\${c}</option>`)
+      .map(c => `<option value="${c}" ${c === currentCity && cityStillExists ? 'selected' : ''}>${c}</option>`)
       .join('');
 
   if (!cityStillExists) {
