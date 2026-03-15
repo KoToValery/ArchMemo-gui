@@ -37,6 +37,7 @@ NOTIFY_EMAIL  = "kostadintosev@gmail.com"
 CLOUD_ROOT    = "РАБОТНИ_облак"
 
 KNOWN_SPECIALTIES = {
+    # Папки по специалност
     "ВиК":           {"label": "ВиК",             "extra_exts": ()},
     "ГЕОДЕЗИЯ":      {"label": "Геодезия",         "extra_exts": ()},
     "ЕЕ":            {"label": "Енергийна ефект.", "extra_exts": (".doc", ".docx", ".xls", ".xlsx")},
@@ -48,6 +49,18 @@ KNOWN_SPECIALTIES = {
     "ПБ":            {"label": "Пожарна безопасн.","extra_exts": (".doc", ".docx")},
     "ПБЗ":           {"label": "ПБЗ",              "extra_exts": (".doc", ".docx")},
     "ПУСО":          {"label": "ПУСО",             "extra_exts": (".doc", ".docx", ".xls", ".xlsx")},
+    # Папки по проектант (алиас → специалност)
+    "ЛЪЧО":          {"label": "Електро (Лъчо)",   "extra_exts": ()},
+    "ЮЛИЯ":          {"label": "ОВК (Юлия)",       "extra_exts": ()},
+    "ВЕСКА":         {"label": "ВиК (Веска)",      "extra_exts": ()},
+    "ТУНЕВ":         {"label": "Конструкции (Тунев)",   "extra_exts": ()},
+    "ПЛАМЕН":        {"label": "Конструкции (Пламен)",  "extra_exts": ()},
+    "БЕГЪМОВ":       {"label": "Конструкции (Бегъмов)", "extra_exts": ()},
+    "ГАНДЖОВ":       {"label": "Конструкции (Ганджов)", "extra_exts": ()},
+    "РУЙЧЕВА":       {"label": "Конструкции (Руйчева)", "extra_exts": ()},
+    "КАЛЕТИ":        {"label": "КС (Калети)",      "extra_exts": (".doc", ".docx", ".xls", ".xlsx")},
+    "ЛЮБИНА":        {"label": "КС (Любина)",      "extra_exts": (".doc", ".docx", ".xls", ".xlsx")},
+    "МАРЦЕНКОВ":     {"label": "ПБ (Марценков)",   "extra_exts": (".doc", ".docx")},
 }
 BASE_EXTS = (".dwg", ".jpg", ".pdf")
 
@@ -208,13 +221,14 @@ class ProjectChecker:
         return ""
 
     def get_folder_items(self, path: str) -> list[dict]:
-        encoded = quote(path)
+        encoded = quote(path, safe="/")
         url     = f"{GRAPH_BASE}/me/drive/root:/{encoded}:/children"
         resp    = self._get(url)
         if resp is None:
             return []
         if resp.status_code == 200:
             return resp.json().get("value", [])
+        log.debug("get_folder_items %s → HTTP %s", path, resp.status_code)
         return []
 
     def has_cad_folder(self, path: str) -> bool:
@@ -299,31 +313,23 @@ class ProjectChecker:
         project_report["pln_name"]      = latest_pln["name"]
         project_report["pln_date_str"]  = pln_date_str
 
-        # ПОДЛОЖКИ — dwg файлове в РАБОТНИ/ПОДЛОЖКИ (рекурсивно в подпапки), последните 10 по дата
-        podlozhki_root  = f"{project_path}/CAD/АРХИТЕКТУРА/РАБОТНИ/ПОДЛОЖКИ"
-        podlozhki_raw   = self._collect_spec_files(podlozhki_root, ())  # само .dwg (BASE_EXTS)
-        podlozhki_dwg   = [i for i in podlozhki_raw if i.get("name", "").lower().endswith(".dwg")]
-        podlozhki_dwg.sort(key=self._item_date, reverse=True)
-        podlozhki_files = [
-            {
-                "name":    i["name"],
-                "date":    self._item_date(i).isoformat(),
-                "item_id": i.get("id", ""),
-                "web_url": "",
-            }
+        # ПОДЛОЖКИ — dwg файлове рекурсивно, последните 10 по дата
+        podlozhki_root = f"{project_path}/CAD/АРХИТЕКТУРА/РАБОТНИ/ПОДЛОЖКИ"
+        podlozhki_raw  = self._collect_spec_files(podlozhki_root, ())
+        podlozhki_dwg  = sorted(
+            [i for i in podlozhki_raw if i.get("name", "").lower().endswith(".dwg")],
+            key=self._item_date, reverse=True
+        )
+        project_report["podlozhki_files"] = [
+            {"name": i["name"], "date": self._item_date(i).isoformat(),
+             "item_id": i.get("id", ""), "web_url": ""}
             for i in podlozhki_dwg[:10]
         ]
-        project_report["podlozhki_files"] = podlozhki_files
 
+        # ПРЕДАДЕНИ — рекурсивно в всички подпапки
         predadeni_path  = f"{project_path}/CAD/АРХИТЕКТУРА/ПРЕДАДЕНИ"
-        predadeni_items = self.get_folder_items(predadeni_path)
-        # Включи и файлове от подпапка DWG
-        dwg_subfolder = next((i for i in predadeni_items
-                               if "folder" in i and i.get("name", "").upper() == "DWG"), None)
-        dwg_sub_items = self.get_folder_items(f"{predadeni_path}/DWG") if dwg_subfolder else []
-        all_predadeni = [i for i in predadeni_items if "folder" not in i] + dwg_sub_items
-
-        delivered_files = [i for i in all_predadeni
+        predadeni_raw   = self._collect_spec_files(predadeni_path, ())
+        delivered_files = [i for i in predadeni_raw
                            if i.get("name", "").lower().endswith((".dwg", ".pdf"))]
         if not delivered_files:
             project_report["status"] = "Няма файлове в Предадени"
