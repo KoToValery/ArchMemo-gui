@@ -1,0 +1,18 @@
+[Unit]
+Description=ArchiMemo GUI Service
+After=network.target
+
+[Service]
+# User and Group should be your Raspberry Pi username (usually 'pi')
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/ArchiMemo/ArchMemo-gui
+# Ensure the path to python3 and app.py is correct
+ExecStart=/usr/bin/python3 /home/pi/ArchiMemo/ArchMemo-gui/app.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/pi/ArchiMemo/ArchMemo-gui/app.log
+StandardError=append:/home/pi/ArchiMemo/ArchMemo-gui/app.log
+
+[Install]
+WantedBy=multi-user.target

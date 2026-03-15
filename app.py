@@ -175,8 +175,10 @@ def run_check(year: str, city: str | None, send_email: bool = False):
     try:
         checker = ProjectChecker(year=year, city=city, send_email=send_email)
         report  = checker.run()
-        save_cache_entry(year, city, report)
-        log.info("✅ Завърши: %d проекта", len(report.get("projects", [])))
+        # Тъй като checker.run() вече записва файловете на диска (вкл. по градове),
+        # просто презареждаме кеша в паметта, за да се обнови UI
+        load_disk_cache()
+        log.info("✅ Завърши: %d проекта общо", len(report.get("projects", [])))
     except Exception as exc:
         log.error("❌ Грешка: %s", exc, exc_info=True)
     finally:

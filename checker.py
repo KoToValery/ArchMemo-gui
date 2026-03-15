@@ -487,16 +487,44 @@ class ProjectChecker:
 
         if self.city:
             self.scan_location(f"{year_path}/{self.city}", self.city)
+            self._save_report(self.year, self.city)
         else:
             items  = self.get_folder_items(year_path)
             cities = [i for i in items if "folder" in i]
             for city_item in cities:
-                self.scan_location(f"{year_path}/{city_item['name']}", city_item["name"])
+                # Рестартираме проектите за всеки град при пълно сканиране
+                city_name = city_item['name']
+                city_report = {
+                    "check_date":        datetime.now().isoformat(),
+                    "year":              self.year,
+                    "city":              city_name.upper(),
+                    "projects":          [],
+                    "skipped_locations": [],
+                    "errors":            [],
+                }
+                # Временно подменяме self.report за scan_location
+                original_report = self.report
+                self.report = city_report
+                
+                self.scan_location(f"{year_path}/{city_name}", city_name)
+                
+                self._save_report(self.year, city_name)
+                # Връщаме оригиналния репорт (може да искаме да съберем всичко в 'ALL' също)
+                original_report["projects"].extend(self.report["projects"])
+                self.report = original_report
 
-        # Запис на JSON — фиксирано име за лесно зареждане при рестарт
-        label       = f"{self.year}_{self.city.lower() if self.city else 'all'}"
-        report_file = os.path.join(OUTPUT_DIR, f"cache_{label}.json")
-        with open(report_file, "w", encoding="utf-8") as f:
-            json.dump(self.report, f, ensure_ascii=False, indent=2)
-        self.report["report_file"] = report_file
+            # Записваме и общия 'ALL' файл
+            self._save_report(self.year, "ALL")
+
         return self.report
+
+    def _save_report(self, year: str, city: str):
+        label = f"{year}_{city.lower()}"
+        report_file = os.path.join(OUTPUT_DIR, f"cache_{label}.json")
+        try:
+            with open(report_file, "w", encoding="utf-8") as f:
+                json.dump(self.report, f, ensure_ascii=False, indent=2)
+            self.report["report_file"] = report_file
+            log.info("💾 Записан кеш файл: %s", report_file)
+        except Exception as exc:
+            log.error("Грешка при запис на кеш файл %s: %s", report_file, exc)
