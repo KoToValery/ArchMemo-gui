@@ -23,15 +23,35 @@ app = Flask(__name__)
 
 SCAN_YEARS  = ["2024", "2025", "2026"]
 MAX_LOG_LINES = 200
+HIDDEN_FILE = os.path.join(OUTPUT_DIR, "hidden_ids.json")
 
 # ─── Глобален стейт ───────────────────────────────────────────────────────────
-# disk_cache: { "2025_БЛАГОЕВГРАД": {timestamp, year, city, projects, summary}, ... }
 state = {
     "running":    False,
     "log_lines":  [],
-    "disk_cache": {},   # зареден от диск при старт
-    "hidden_ids": set(), # скрити проекти (project full_path като id)
+    "disk_cache": {},
+    "hidden_ids": set(),
 }
+
+
+def _load_hidden_ids():
+    try:
+        with open(HIDDEN_FILE, encoding="utf-8") as f:
+            ids = json.load(f)
+        state["hidden_ids"] = set(ids)
+        log.info("👁 Заредени %d скрити проекта", len(ids))
+    except FileNotFoundError:
+        pass
+    except Exception as exc:
+        log.warning("Грешка при зареждане на hidden_ids: %s", exc)
+
+
+def _save_hidden_ids():
+    try:
+        with open(HIDDEN_FILE, "w", encoding="utf-8") as f:
+            json.dump(list(state["hidden_ids"]), f, ensure_ascii=False)
+    except Exception as exc:
+        log.warning("Грешка при запис на hidden_ids: %s", exc)
 
 
 # ─── Лог handler за UI ────────────────────────────────────────────────────────
@@ -134,6 +154,15 @@ def _build_full_html(projects: list, year: str, city: str | None,
                 </div>""")
                 continue
 
+            stanovishta = p.get("stanovishta", {
+                    "visa_status": "missing", "skica_status": "missing",
+                    "visa_files": [], "skica_files": [],
+                    "stanovishte_files": [], "other_files": [],
+                })
+            missing_docs = (
+                stanovishta.get("visa_status") == "missing" or
+                not stanovishta.get("stanovishte_files")
+            )
             html = build_html_report(
                 city               = f"{year} / {p.get('location') or city or '—'}",
                 project_name       = p["name"],
@@ -146,14 +175,11 @@ def _build_full_html(projects: list, year: str, city: str | None,
                 specialties_rows   = p.get("specialties_rows", []),
                 specialties_detail = p.get("specialties", {}),
                 project_path       = p.get("full_path", ""),
-                stanovishta        = p.get("stanovishta", {
-                    "visa_status": "missing", "skica_status": "missing",
-                    "visa_files": [], "skica_files": [],
-                    "stanovishte_files": [], "other_files": [],
-                }),
+                stanovishta        = stanovishta,
                 podlozhki_files    = p.get("podlozhki_files", []),
                 project_id         = pid,
                 is_hidden          = is_hidden,
+                missing_docs       = missing_docs,
             )
             parts.append(html)
         except Exception as exc:
@@ -200,6 +226,7 @@ scheduler.start()
 
 # Зареди кеш от диск при старт
 load_disk_cache()
+_load_hidden_ids()
 
 
 # ─── HTML шаблон ──────────────────────────────────────────────────────────────
@@ -253,7 +280,11 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .cache-wrap { background: var(--card); padding: 12px 16px; margin: 0 12px 12px;
                 border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
   .cache-title { font-size: 13px; font-weight: 600; color: var(--muted);
-                 margin-bottom: 8px; text-transform: uppercase; letter-spacing: .5px; }
+                 margin-bottom: 8px; text-transform: uppercase; letter-spacing: .5px;
+                 cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center; }
+  .cache-title:hover { color: var(--accent); }
+  .cache-body { display: none; }
+  .cache-body.open { display: block; }
   .cache-list { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; flex-wrap: wrap; }
   .cache-item { min-width: 130px; padding: 10px 12px; background: #f8f9fa;
                 border-radius: 7px; cursor: pointer; transition: all .2s;
@@ -298,6 +329,8 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .project-card { background: var(--card); border-radius: 10px; margin-bottom: 14px;
                   box-shadow: 0 1px 4px rgba(0,0,0,.1); overflow: hidden; }
   .project-card.hidden-card { opacity: 0.45; }
+  .project-card.missing-docs > .card-header { background: #d35400; }
+  .project-card.missing-docs > .card-header:hover { background: #b94600; }
   .card-header { background: var(--header); padding: 14px 16px; cursor: pointer;
                  user-select: none; transition: background .2s; }
   .card-header:hover { background: #34495e; }
@@ -428,25 +461,27 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 
 {% if cache_entries %}
 <div class="cache-wrap">
-  <div class="cache-title">📚 Налични данни (десен бутон за изтриване)</div>
-  <div class="cache-list" id="cacheList">
-    {% for key, entry in cache_entries %}
-    <div class="cache-item"
-         id="ci-{{ key }}"
-         data-key="{{ key }}"
-         data-year="{{ entry.year }}"
-         data-city="{{ entry.city }}"
-         onclick="loadFromCache('{{ key }}')"
-         oncontextmenu="showContextMenu(event, '{{ key }}')">
-      <div class="cache-time">{{ entry.timestamp }}</div>
-      <div class="cache-info">{{ entry.year }} / {{ entry.city }}</div>
-      <div class="cache-summary">
-        <span class="cache-badge ok">{{ entry.summary.ok }}</span>
-        <span class="cache-badge warn">{{ entry.summary.issues }}</span>
-        <span class="cache-badge err">{{ entry.summary.errors }}</span>
+  <div class="cache-title" onclick="this.nextElementSibling.classList.toggle('open'); this.querySelector('.ci').classList.toggle('open')">
+    📚 Налични данни <span class="ci toggle-icon">▼</span>
+  </div>
+  <div class="cache-body">
+    <div class="cache-list" id="cacheList">
+      {% for key, entry in cache_entries %}
+      <div class="cache-item"
+           id="ci-{{ key }}"
+           data-key="{{ key }}"
+           onclick="loadFromCache('{{ key }}')"
+           oncontextmenu="showContextMenu(event, '{{ key }}')">
+        <div class="cache-time">{{ entry.timestamp }}</div>
+        <div class="cache-info">{{ entry.year }} / {{ entry.city }}</div>
+        <div class="cache-summary">
+          <span class="cache-badge ok">{{ entry.summary.ok }}</span>
+          <span class="cache-badge warn">{{ entry.summary.issues }}</span>
+          <span class="cache-badge err">{{ entry.summary.errors }}</span>
+        </div>
       </div>
+      {% endfor %}
     </div>
-    {% endfor %}
   </div>
 </div>
 {% endif %}
@@ -458,24 +493,6 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <div class="status-bar" id="statusBar"></div>
 
 <div class="toolbar" id="toolbar" style="display:none">
-  <div class="summary" style="margin:0; flex:1">
-    <div class="summary-item">
-      <div class="num num-all" id="sumTotal">0</div>
-      <div class="lbl">Общо</div>
-    </div>
-    <div class="summary-item">
-      <div class="num num-ok" id="sumOk">0</div>
-      <div class="lbl">Актуални</div>
-    </div>
-    <div class="summary-item">
-      <div class="num num-warn" id="sumIssues">0</div>
-      <div class="lbl">Проблеми</div>
-    </div>
-    <div class="summary-item">
-      <div class="num num-err" id="sumErrors">0</div>
-      <div class="lbl">Грешки</div>
-    </div>
-  </div>
   <div class="checkbox-row">
     <input type="checkbox" id="showHidden" onchange="toggleShowHidden()">
     <label for="showHidden">Покажи скрити</label>
@@ -634,10 +651,6 @@ function loadFromCache(key, updateDropdowns = true) {
       if (d.error) { setStatus('done', '❌ ' + d.error); return; }
       document.getElementById('results').innerHTML = d.html;
       document.getElementById('lastRun').textContent = d.timestamp;
-      document.getElementById('sumTotal').textContent  = d.summary.total;
-      document.getElementById('sumOk').textContent     = d.summary.ok;
-      document.getElementById('sumIssues').textContent = d.summary.issues;
-      document.getElementById('sumErrors').textContent = d.summary.errors;
       document.getElementById('toolbar').style.display = '';
       setStatus('done', '📂 ' + d.year + ' / ' + d.city + ' — ' + d.timestamp);
     });
@@ -914,6 +927,7 @@ def toggle_hide_endpoint():
     else:
         state["hidden_ids"].add(pid)
         hidden = True
+    _save_hidden_ids()
     return jsonify({"hidden": hidden})
 
 

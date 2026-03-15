@@ -28,7 +28,8 @@ def build_html_report(city: str, project_name: str, full_name: str,
                       stanovishta: dict,
                       podlozhki_files: list = None,
                       project_id: str = "",
-                      is_hidden: bool = False) -> str:
+                      is_hidden: bool = False,
+                      missing_docs: bool = False) -> str:
     check_time = datetime.now().strftime("%d.%m.%Y %H:%M")
     if podlozhki_files is None:
         podlozhki_files = []
@@ -128,11 +129,12 @@ def build_html_report(city: str, project_name: str, full_name: str,
     if not all_doc_rows:
         all_doc_rows = '<tr><td colspan="2" class="empty">Папката е празна или не съществува</td></tr>'
 
-    hidden_cls  = " hidden-card" if is_hidden else ""
-    pid_escaped = pid.replace('"', '&quot;')
+    hidden_cls   = " hidden-card" if is_hidden else ""
+    missing_cls  = " missing-docs" if missing_docs else ""
+    pid_escaped  = pid.replace('"', '&quot;')
 
     return f"""
-<div class="project-card collapsed{hidden_cls}" data-pid="{pid_escaped}">
+<div class="project-card collapsed{hidden_cls}{missing_cls}" data-pid="{pid_escaped}">
   <div class="card-header" onclick="toggleProject(this)">
     <div class="card-title-row">
       <span class="toggle-icon">▶</span>
