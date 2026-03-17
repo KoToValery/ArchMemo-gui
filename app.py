@@ -12,8 +12,6 @@ import logging
 from datetime import datetime
 from flask import Flask, render_template_string, request, jsonify
 
-sys.path.insert(0, '/home/koto/onedrive-env/lib/python3.14/site-packages')
-
 from checker import ProjectChecker, OUTPUT_DIR, CLOUD_ROOT, log
 from html_builder import build_html_report
 
@@ -443,10 +441,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
           <option value="КЮСТЕНДИЛ">КЮСТЕНДИЛ</option>
         </select>
       </div>
-      <div class="form-group" style="flex:0">
-        <label>&nbsp;</label>
-        <button type="submit" class="btn btn-primary" id="runBtn">▶ Провери</button>
-      </div>
+
       <div class="form-group" style="flex:0">
         <label>&nbsp;</label>
         <button type="button" class="btn btn-danger" id="fullScanBtn" onclick="startFullScan()">🔄 Пълно сканиране</button>
@@ -571,7 +566,6 @@ function hasCacheEntry(key) {
 
 function runScan(year, city, sendEmail) {
   setStatus('running', '<span class="spinner"></span> Проверката е в ход...');
-  document.getElementById('runBtn').disabled = true;
   document.getElementById('fullScanBtn').disabled = true;
 
   fetch('/run', {
@@ -583,12 +577,10 @@ function runScan(year, city, sendEmail) {
       pollTimer = setInterval(pollStatus, 2000);
     } else {
       setStatus('done', d.message || 'Готово');
-      document.getElementById('runBtn').disabled = false;
       document.getElementById('fullScanBtn').disabled = false;
     }
   }).catch(() => {
     setStatus('done', '❌ Грешка при свързване');
-    document.getElementById('runBtn').disabled = false;
     document.getElementById('fullScanBtn').disabled = false;
   });
 }
@@ -596,7 +588,6 @@ function runScan(year, city, sendEmail) {
 function startFullScan() {
   if (!confirm('Ще се сканират всички години 2024-2026. Продължи?')) return;
   setStatus('running', '<span class="spinner"></span> Пълно сканиране в ход...');
-  document.getElementById('runBtn').disabled = true;
   document.getElementById('fullScanBtn').disabled = true;
   fetch('/run_full', {method: 'POST'}).then(r => r.json()).then(d => {
     if (d.status === 'started') {
@@ -611,7 +602,6 @@ function pollStatus() {
     if (!d.running) {
       clearInterval(pollTimer);
       pollTimer = null;
-      document.getElementById('runBtn').disabled = false;
       document.getElementById('fullScanBtn').disabled = false;
       setStatus('done', '✅ Завърши — ' + (d.last_scan || ''));
       // Обнови cache list
@@ -824,7 +814,6 @@ function toggleProject(header) {
 window.addEventListener('DOMContentLoaded', function() {
   updateFilters();
   {% if running %}
-  document.getElementById('runBtn').disabled = true;
   document.getElementById('fullScanBtn').disabled = true;
   setStatus('running', '<span class="spinner"></span> Проверката е в ход...');
   pollTimer = setInterval(pollStatus, 2000);
