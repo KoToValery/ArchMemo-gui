@@ -375,7 +375,8 @@ class ProjectChecker:
                 "item_id": item_id,
                 "web_url": "",
             })
-            if fd < pln_date:
+            # Сравняваме само дати (без час) — минимум 1 ден разлика
+            if fd.date() < pln_date.date():
                 outdated_arch.append(f"{name} ({fd.strftime('%d.%m.%Y')})")
         project_report["outdated_arch"] = outdated_arch
         if outdated_arch:
@@ -410,7 +411,8 @@ class ProjectChecker:
                 "latest_file": latest_spec["name"],
                 "latest_date": latest_date.isoformat(),
             }
-            if latest_date < pln_date:
+            # Сравняваме само дати (без час) — минимум 1 ден разлика
+            if latest_date.date() < pln_date.date():
                 specialties_rows.append({"label": cfg["label"], "folder_name": folder_name,
                                          "status": "outdated",
                                          "files_count": len(spec_files), "latest_date": date_str})
