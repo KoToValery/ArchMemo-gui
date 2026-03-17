@@ -17,8 +17,6 @@ from urllib.parse import quote
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-sys.path.insert(0, '/home/koto/onedrive-env/lib/python3.14/site-packages')
-
 # ─── Config ────────────────────────────────────────────────────────────────────
 CLIENT_ID  = "14d82eec-204b-4c2f-b7e8-296a70dab67e"
 AUTHORITY  = "https://login.microsoftonline.com/common"
@@ -278,27 +276,56 @@ class ProjectChecker:
                 files.append(item)
         return files
 
+    def _collect_stanovishta(self, project_path: str) -> dict:
+        """Чете ДОКУМЕНТИ/СТАНОВИЩА И ВИЗА независимо от останалата проверка."""
+        doc_path  = f"{project_path}/ДОКУМЕНТИ/СТАНОВИЩА И ВИЗА"
+        doc_items = self.get_folder_items(doc_path)
+        doc_files = [i for i in doc_items if "folder" not in i]
+
+        visa_files = []; skica_files = []; stanovishte_files = []; other_files = []
+        for item in doc_files:
+            fname = item.get("name", "")
+            ftype = classify_doc_file(fname)
+            fdate = self._item_date(item).strftime("%d.%m.%Y")
+            entry = {"name": fname, "date": fdate}
+            if ftype == "виза":            visa_files.append(entry)
+            elif ftype == "скица":         skica_files.append(entry)
+            elif ftype == "становище":     stanovishte_files.append(entry)
+            else:                          other_files.append(entry)
+
+        return {
+            "visa_status":       "found" if visa_files else "missing",
+            "skica_status":      "found" if skica_files else "missing",
+            "visa_files":        visa_files,
+            "skica_files":       skica_files,
+            "stanovishte_files": stanovishte_files,
+            "other_files":       other_files,
+        }
+
     def check_project(self, project_path: str, project_name: str, location: str = "") -> dict:
         full_name = f"{project_name} ({location})" if location else project_name
         log.info("── Проект: %s", full_name)
 
         project_report = {
-            "name":            project_name,
-            "location":        location,
-            "full_path":       project_path,
-            "status":          "",
-            "last_pln_date":   None,
-            "pln_name":        None,
-            "pln_date_str":    None,
-            "delivered_count": 0,
-            "delivered_files": [],
-            "outdated_arch":   [],
-            "specialties":     {},
+            "name":             project_name,
+            "location":         location,
+            "full_path":        project_path,
+            "status":           "",
+            "last_pln_date":    None,
+            "pln_name":         None,
+            "pln_date_str":     None,
+            "delivered_count":  0,
+            "delivered_files":  [],
+            "outdated_arch":    [],
+            "specialties":      {},
             "specialties_rows": [],
-            "issues":          [],
-            "stanovishta":     {},
-            "podlozhki_files": [],
+            "issues":           [],
+            "stanovishta":      {},
+            "podlozhki_files":  [],
         }
+
+        # Становищата се четат винаги — независимо от останалите проверки
+        project_report["stanovishta"] = self._collect_stanovishta(project_path)
 
         rabotni_items = self.get_folder_items(f"{project_path}/CAD/АРХИТЕКТУРА/РАБОТНИ")
         pln_files     = [i for i in rabotni_items if i.get("name", "").lower().endswith(".pln")]
@@ -394,30 +421,6 @@ class ProjectChecker:
                                          "files_count": len(spec_files), "latest_date": date_str})
 
         project_report["specialties_rows"] = specialties_rows
-
-        doc_path  = f"{project_path}/ДОКУМЕНТИ/СТАНОВИЩА И ВИЗА"
-        doc_items = self.get_folder_items(doc_path)
-        doc_files = [i for i in doc_items if "folder" not in i]
-
-        visa_files = []; skica_files = []; stanovishte_files = []; other_files = []
-        for item in doc_files:
-            fname = item.get("name", "")
-            ftype = classify_doc_file(fname)
-            fdate = self._item_date(item).strftime("%d.%m.%Y")
-            entry = {"name": fname, "date": fdate}
-            if ftype == "виза":       visa_files.append(entry)
-            elif ftype == "скица":    skica_files.append(entry)
-            elif ftype == "становище": stanovishte_files.append(entry)
-            else:                     other_files.append(entry)
-
-        project_report["stanovishta"] = {
-            "visa_status":        "found" if visa_files else "missing",
-            "skica_status":       "found" if skica_files else "missing",
-            "visa_files":         visa_files,
-            "skica_files":        skica_files,
-            "stanovishte_files":  stanovishte_files,
-            "other_files":        other_files,
-        }
 
         if has_issues:
             project_report["status"] = "Има проблеми"
