@@ -65,13 +65,14 @@ BASE_EXTS = (".dwg", ".jpg", ".pdf")
 _VISA_KEYWORDS    = ("виза", "визи", "viza", "visa")
 _SKICA_KEYWORDS   = ("скица", "skica", "skitsa", "sketch", "скетч")
 _STANOVISHTE_KEYWORDS = (
-    "становище", "stanovishte", "становища", "ERM", "zapad", "vik",
+    "становище", "stanovishte", "становища", "erm", "zapad", "vik",
     "чез", "енерго", "energo", "izhodni", "evn", "evi", "еви", "ел.разпр", "ел разпр",
-    "вик", "vik", "ЕРМ", "мрежи", "Запад", "stanoviste",
-    "напоителни", "ЧЕЗ",
+    "вик", "ерм", "мрежи", "запад", "stanoviste",
+    "напоителни",
 )
 
-
+# Всички keywords са lowercase — сравняваме с name.lower() за case-insensitive match.
+# name.lower() в Python 3 работи коректно с Unicode/кирилица.
 def classify_doc_file(name: str) -> str:
     n = name.lower()
     if any(k in n for k in _VISA_KEYWORDS):
