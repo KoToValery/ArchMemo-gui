@@ -24,8 +24,15 @@ SCOPES     = ["User.Read", "Files.Read", "Files.ReadWrite"]
 CACHE_FILE = os.path.expanduser("~/.onedrive_business_token_cache.json")
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
-OUTPUT_DIR = "/home/koto/.openclaw/workspace/memory"
+# Пътищата вече са изцяло в работната директория на проекта
+BASE_PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = os.path.join(BASE_PROJECT_DIR, "data")
 LOG_FILE   = os.path.join(OUTPUT_DIR, "project_checker.log")
+
+# Чувствителните данни (пароли и токени) също са в работната папка
+SECURE_DIR = os.path.join(BASE_PROJECT_DIR, "secure")
+CREDS_FILE = os.path.join(SECURE_DIR, "credentials.ini")
+CACHE_FILE = os.path.join(SECURE_DIR, "onedrive_token_cache.json")
 
 REQUEST_DELAY = 0.5
 MAX_RETRIES   = 3
@@ -120,11 +127,10 @@ class ProjectChecker:
         }
 
     def _load_smtp_password(self):
-        creds_file = "/home/koto/.openclaw/workspace/.secure/credentials.ini"
         try:
-            if not os.path.exists(creds_file):
+            if not os.path.exists(CREDS_FILE):
                 return
-            with open(creds_file, encoding="utf-8") as f:
+            with open(CREDS_FILE, encoding="utf-8") as f:
                 content = f.read()
             in_section = False
             for line in content.splitlines():
@@ -145,20 +151,40 @@ class ProjectChecker:
             if os.path.exists(CACHE_FILE):
                 with open(CACHE_FILE, encoding="utf-8") as f:
                     cache.deserialize(f.read())
-            app      = msal.PublicClientApplication(CLIENT_ID, authority=AUTHORITY, token_cache=cache)
-            accounts = app.get_accounts()
-            if not accounts:
-                log.error("Няма запазени акаунти в token cache.")
-                return False
-            result = app.acquire_token_silent(SCOPES, account=accounts[0])
+
+            msal_app = msal.PublicClientApplication(CLIENT_ID, authority=AUTHORITY, token_cache=cache)
+            accounts = msal_app.get_accounts()
+
+            result = None
+            if accounts:
+                result = msal_app.acquire_token_silent(SCOPES, account=accounts[0])
+
+            # Ако няма акаунт или silent refresh не успя — device code flow
+            if not result or "access_token" not in result:
+                log.warning("Няма валиден токен — стартирам device code логин...")
+                flow = msal_app.initiate_device_flow(scopes=SCOPES)
+                if "user_code" not in flow:
+                    log.error("Неуспешно стартиране на device flow: %s", flow)
+                    return False
+                print("\n" + "="*60)
+                print(flow["message"])
+                print("="*60 + "\n")
+                log.info("Device code логин: %s", flow["message"])
+                result = msal_app.acquire_token_by_device_flow(flow)
+
             if result and "access_token" in result:
                 self.token   = result["access_token"]
                 self.headers = {
                     "Authorization": f'Bearer {result["access_token"]}',
                     "Content-Type":  "application/json",
                 }
+                # Запази обновения кеш
+                os.makedirs(os.path.dirname(CACHE_FILE), exist_ok=True)
+                with open(CACHE_FILE, "w", encoding="utf-8") as f:
+                    f.write(cache.serialize())
                 return True
-            log.error("Не може да се придобие token: %s", result.get("error_description", "—"))
+
+            log.error("Не може да се придобие token: %s", result.get("error_description", "—") if result else "няма резултат")
             return False
         except Exception as exc:
             log.exception("Изключение при придобиване на token: %s", exc)

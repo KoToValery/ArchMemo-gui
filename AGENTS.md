@@ -15,15 +15,68 @@
 ├── html_builder.py  # Генератор на HTML карти за проекти
 ├── git_helper.py    # Git помощни функции
 ├── requirements.txt # Python зависимости
+├── data/            # Папка за JSON кеш файлове и логове
+├── secure/          # Папка за токени и пароли (SMTP, OneDrive)
 └── AGENTS.md        # Тази документация
 ```
 
-Персистентни данни (в `OUTPUT_DIR = ~/.openclaw/workspace/memory/`):
+Персистентни данни (в подпапка `./data/`):
 ```
-cache_2025_благоевград.json   # Кеш от сканиране по година/град
-cache_2025_all.json           # Кеш за всички градове за дадена година
-hidden_ids.json               # Скрити проекти (запазват се при рестарт)
+cache_2024_all.json           # Кеш за 2024
+cache_2025_благоевград.json   # Кеш по град
+hidden_ids.json               # Скрити проекти
 project_checker.log           # Лог файл
+```
+
+Конфигурация и сигурност (в подпапка `./secure/`):
+```
+credentials.ini               # SMTP парола
+onedrive_token_cache.json     # MSAL токен кеш
+```
+
+---
+
+## Преместване на друг компютър (Linux Mint / Ubuntu)
+
+За лесен трансфер и автоматичен старт:
+
+1.  Копирайте цялата папка на новия компютър.
+2.  Отворете терминал в папката.
+3.  Стартирайте инсталационния скрипт:
+    ```bash
+    chmod +x setup_mint.sh
+    ./setup_mint.sh
+    ```
+
+Скриптът ще:
+- Инсталира нужните Python библиотеки в `venv`.
+- Създаде папка `data/` за кеш и логове.
+- Създаде папка `secure/` за пароли и токени.
+- Настрои `systemd` услуга за автоматичен старт и рестарт.
+
+Услугата се управлява с:
+- `sudo systemctl status archmemo.service` — статус
+- `sudo systemctl restart archmemo.service` — рестарт
+- `sudo systemctl stop archmemo.service` — спиране
+- `journalctl -u archmemo.service -f` — логове в реално време
+
+---
+
+## Пароли и Аутентикация (Трансфер)
+
+Всички данни вече се съхраняват локално в папката на проекта. При преместване на нова машина:
+
+1.  **Копирайте цялата папка на проекта.**
+2.  **OneDrive (Microsoft Graph)**:
+    - Файлът с кеширания токен `~/.onedrive_business_token_cache.json` от старата машина трябва да се копира в `./secure/onedrive_token_cache.json` на новата.
+3.  **SMTP Парола (за имейли)**:
+    - Файлът `~/.archmemo/.secure/credentials.ini` от старата машина трябва да се копира в `./secure/credentials.ini` на новата.
+
+Команди за бързо копиране (ако ползвате SCP/SSH):
+```bash
+# Копиране от Raspberry Pi към Linux Mint (изпълнява се в папката на проекта на новия компютър)
+scp user@pi-ip:~/.onedrive_business_token_cache.json ./secure/onedrive_token_cache.json
+scp user@pi-ip:~/.archmemo/.secure/credentials.ini ./secure/credentials.ini
 ```
 
 ---
@@ -234,3 +287,5 @@ PORT=8080 python app.py
 ## Автоматично сканиране
 
 Scheduler-ът стартира пълно сканиране (2024, 2025, 2026) всеки ден в **08:00 (Europe/Sofia)**. Резултатите се записват в `cache_*.json` файлове и се зареждат автоматично при следващ старт на сървъра.
+
+sudo systemctl restart archmemo.service

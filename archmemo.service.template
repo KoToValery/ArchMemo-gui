@@ -1,18 +1,17 @@
 [Unit]
-Description=ArchiMemo GUI Service
+Description=ArchiMemo Project Delivery Checker
 After=network.target
 
 [Service]
-# User and Group should be your Raspberry Pi username (usually 'pi')
-User=pi
-Group=pi
-WorkingDirectory=/home/pi/ArchiMemo/ArchMemo-gui
-# Ensure the path to python3 and app.py is correct
-ExecStart=/usr/bin/python3 /home/pi/ArchiMemo/ArchMemo-gui/app.py
+User={{USER}}
+Group={{USER}}
+WorkingDirectory={{APP_DIR}}
+ExecStart={{PYTHON_PATH}} {{APP_DIR}}/app.py
 Restart=always
 RestartSec=10
-StandardOutput=append:/home/pi/ArchiMemo/ArchMemo-gui/app.log
-StandardError=append:/home/pi/ArchiMemo/ArchMemo-gui/app.log
+StandardOutput=append:{{APP_DIR}}/app.log
+StandardError=append:{{APP_DIR}}/app.log
+Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target
