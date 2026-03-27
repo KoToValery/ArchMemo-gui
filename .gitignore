@@ -114,6 +114,13 @@ Thumbs.db
 .cursorignore
 .cursorindexingignore
 
+# Sensitive / credentials
+.onedrive_business_token_cache.json
+secure/
+data/
+*.ini
+pass
+
 # Marimo
 marimo/_static/
 marimo/_lsp/
