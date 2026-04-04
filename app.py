@@ -433,12 +433,6 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
         <label for="city">Град</label>
         <select id="city" name="city">
           <option value="">Всички градове</option>
-          <option value="БЛАГОЕВГРАД">БЛАГОЕВГРАД</option>
-          <option value="СОФИЯ">СОФИЯ</option>
-          <option value="БАНСКО">БАНСКО</option>
-          <option value="РАЗЛОГ">РАЗЛОГ</option>
-          <option value="САМОКОВ">САМОКОВ</option>
-          <option value="КЮСТЕНДИЛ">КЮСТЕНДИЛ</option>
         </select>
       </div>
 
@@ -731,7 +725,8 @@ function updateFilters() {
     .join('');
 
   const selectedYear = yearSelect.value;
-  const citiesSet = new Set(['БЛАГОЕВГРАД', 'СОФИЯ', 'БАНСКО', 'РАЗЛОГ', 'САМОКОВ', 'КЮСТЕНДИЛ']);
+  // Само градове с реални данни в кеша за избраната година
+  const citiesSet = new Set();
   items
     .filter(i => i.year === selectedYear && i.city !== 'ALL')
     .forEach(i => citiesSet.add(i.city));

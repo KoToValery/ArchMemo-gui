@@ -484,25 +484,37 @@ class ProjectChecker:
             return
 
         if self.has_cad_folder(location_path):
-            # 2. Пропусни ако няма файлове и в двете папки (ПОДЛОЖКИ и ПРЕДАДЕНИ)
+            # Включи проекта ако има поне едно от:
+            # а) .dwg файлове в ПОДЛОЖКИ (рекурсивно)
+            # б) .dwg/.pdf файлове в ПРЕДАДЕНИ (рекурсивно)
+            # в) виза/скица/становище в ДОКУМЕНТИ/СТАНОВИЩА И ВИЗА
             podlozhki_root = f"{location_path}/CAD/АРХИТЕКТУРА/РАБОТНИ/ПОДЛОЖКИ"
             predadeni_root = f"{location_path}/CAD/АРХИТЕКТУРА/ПРЕДАДЕНИ"
-            
-            # Търсим .dwg в ПОДЛОЖКИ (рекурсивно)
-            podlozhki_files = self._collect_spec_files(podlozhki_root, ())
-            has_podlozhki = any(i.get("name", "").lower().endswith(".dwg") for i in podlozhki_files)
-            
-            # Търсим .dwg/.pdf в ПРЕДАДЕНИ (рекурсивно)
-            predadeni_files = self._collect_spec_files(predadeni_root, ())
-            has_predadeni = any(i.get("name", "").lower().endswith(BASE_EXTS) for i in predadeni_files)
-            
+
+            has_podlozhki = any(
+                i.get("name", "").lower().endswith(".dwg")
+                for i in self._collect_spec_files(podlozhki_root, ())
+            )
+            has_predadeni = any(
+                i.get("name", "").lower().endswith((".dwg", ".pdf"))
+                for i in self._collect_spec_files(predadeni_root, ())
+            )
+
             if not has_podlozhki and not has_predadeni:
-                log.info("⏭ Пропускам проект без файлове в ПОДЛОЖКИ и ПРЕДАДЕНИ: %s", location_name)
-                self.report["skipped_locations"].append({
-                    "path": location_path, 
-                    "reason": "Няма файлове в ПОДЛОЖКИ и ПРЕДАДЕНИ"
-                })
-                return
+                # Последен шанс — проверяваме за виза/скица/становище
+                st = self._collect_stanovishta(location_path)
+                has_docs = (
+                    st.get("visa_status") == "found" or
+                    st.get("skica_status") == "found" or
+                    bool(st.get("stanovishte_files"))
+                )
+                if not has_docs:
+                    log.info("⏭ Пропускам проект без файлове: %s", location_name)
+                    self.report["skipped_locations"].append({
+                        "path": location_path,
+                        "reason": "Няма ПОДЛОЖКИ, ПРЕДАДЕНИ или СТАНОВИЩА"
+                    })
+                    return
             
             project = self.check_project(location_path, location_name, parent)
             self.report["projects"].append(project)
