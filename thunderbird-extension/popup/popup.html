@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<title>ArchiMemo — Запис на подложки</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         margin: 0; padding: 14px; background: #f5f6fa; color: #2c3e50; font-size: 14px; }
+  h2   { margin: 0 0 12px; font-size: 16px; color: #2c3e50; }
+  .section { background: #fff; border-radius: 6px; padding: 10px 12px;
+             margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .label   { font-size: 11px; color: #7f8c8d; text-transform: uppercase;
+             letter-spacing: .5px; margin-bottom: 6px; }
+  .badge   { display: inline-block; padding: 2px 8px; border-radius: 10px;
+             font-size: 12px; font-weight: 600; margin: 2px 3px 2px 0; }
+  .badge-el   { background: #d5e8f7; color: #1a6fa8; }
+  .badge-vik  { background: #d5f0e8; color: #1a7a52; }
+  .badge-ovk  { background: #fde8d5; color: #a85a1a; }
+  .badge-kon  { background: #ede8fd; color: #5a1aa8; }
+  .badge-ks   { background: #fdf5d5; color: #8a6a00; }
+  .badge-pb   { background: #fdd5d5; color: #a81a1a; }
+  .badge-vert { background: #d5fdf5; color: #007a6a; }
+  .badge-def  { background: #e8e8e8; color: #555; }
+  .file-list  { font-size: 13px; color: #34495e; margin: 4px 0; }
+  .file-list li { margin: 2px 0; }
+  .info-box   { background: #e8f4fd; border-left: 3px solid #3498db; padding: 10px;
+                margin-top: 10px; font-size: 13px; line-height: 1.5; }
+  .btn-save   { width: 100%; padding: 12px; border: none; border-radius: 6px;
+                cursor: pointer; font-size: 14px; font-weight: 600;
+                background: #27ae60; color: #fff; margin-top: 10px; }
+  .btn-save:hover { background: #219a52; }
+  .btn-skip   { width: 100%; padding: 8px; border: none; border-radius: 4px;
+                cursor: pointer; font-size: 13px; background: #e0e0e0; color: #555;
+                margin-top: 6px; }
+  .btn-skip:hover { background: #ccc; }
+</style>
+</head>
+<body>
+<h2>📐 ArchiMemo — Запис на подложки</h2>
+
+<div class="section">
+  <div class="label">Засечени специалности</div>
+  <div id="specialties"></div>
+</div>
+
+<div class="section">
+  <div class="label">Прикачени .dwg файлове</div>
+  <ul class="file-list" id="fileList"></ul>
+</div>
+
+<div class="info-box">
+  ℹ️ Файлът <strong>podlozhki_YYYY-MM-DD.json</strong> ще се изтегли.<br>
+  Запазете го в папката <strong>ПОДЛОЖКИ</strong> на проекта.
+</div>
+
+<button class="btn-save" id="btnSave">💾 Запиши в досието</button>
+<button class="btn-skip" id="btnSkip">Пропусни</button>
+
+<script src="popup.js"></script>
+</body>
+</html>

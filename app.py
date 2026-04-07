@@ -178,6 +178,7 @@ def _build_full_html(projects: list, year: str, city: str | None,
                 project_id         = pid,
                 is_hidden          = is_hidden,
                 missing_docs       = missing_docs,
+                podlozhki_log      = p.get("podlozhki_log", []),
             )
             parts.append(html)
         except Exception as exc:
@@ -902,6 +903,18 @@ def load_cache_endpoint():
         "city":      entry["city"],
         "summary":   entry["summary"],
     })
+
+
+@app.route("/notify_podlozhki", methods=["POST"])
+def notify_podlozhki_endpoint():
+    """Приема нотификация от Thunderbird Extension за изпратени подложки."""
+    data = request.get_json(force=True)
+    log.info("📧 Подложки изпратени: папка=%s, дата=%s, файлове=%s, специалности=%s",
+             data.get("project_folder", "?"),
+             data.get("date", "?"),
+             data.get("files", []),
+             [f"{s.get('specialty')} ({s.get('name')})" for s in data.get("specialties", [])])
+    return jsonify({"status": "ok"})
 
 
 @app.route("/toggle_hide", methods=["POST"])

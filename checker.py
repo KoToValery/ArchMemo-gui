@@ -329,6 +329,61 @@ class ProjectChecker:
             "other_files":       other_files,
         }
 
+    def _read_podlozhki_log(self, podlozhki_path: str) -> dict:
+        """Чете всички podlozhki_*.json файлове от ПОДЛОЖКИ папката и ги обединява."""
+        items = self.get_folder_items(podlozhki_path)
+        combined = {}
+        
+        for item in items:
+            name = item.get("name", "")
+            # Търсим файлове с pattern podlozhki_YYYY-MM-DD.json
+            if not (name.startswith("podlozhki_") and name.endswith(".json")):
+                continue
+            
+            # Прочети файла
+            encoded = quote(f"{podlozhki_path}/{name}", safe="/")
+            url     = f"{GRAPH_BASE}/me/drive/root:/{encoded}:/content"
+            resp    = self._get(url)
+            if resp is None or resp.status_code != 200:
+                continue
+            
+            try:
+                file_data = resp.json()
+                # Обедини записите — ако има дублиращи се ключове, добави sends
+                for key, entry in file_data.items():
+                    if key not in combined:
+                        combined[key] = entry
+                    else:
+                        # Добави sends от този файл към съществуващия запис
+                        combined[key]["sends"].extend(entry.get("sends", []))
+            except Exception:
+                continue
+        
+        return combined
+
+    def _format_podlozhki_log(self, raw_log: dict) -> list:
+        """Трансформира суровия речник в списък сортиран по last_send DESC."""
+        result = []
+        for key, entry in raw_log.items():
+            if not isinstance(entry, dict):
+                continue
+            sends = sorted(
+                entry.get("sends", []),
+                key=lambda s: s.get("date", ""),
+                reverse=True,
+            )
+            last_send = sends[0]["date"] if sends else ""
+            result.append({
+                "specialty":   entry.get("specialty", ""),
+                "engineer":    entry.get("engineer", ""),
+                "email":       entry.get("email", ""),
+                "sends":       sends,
+                "last_send":   last_send,
+                "total_sends": len(sends),
+            })
+        result.sort(key=lambda x: x["last_send"], reverse=True)
+        return result
+
     def check_project(self, project_path: str, project_name: str, location: str = "") -> dict:
         full_name = f"{project_name} ({location})" if location else project_name
         log.info("── Проект: %s", full_name)
@@ -349,6 +404,7 @@ class ProjectChecker:
             "issues":           [],
             "stanovishta":      {},
             "podlozhki_files":  [],
+            "podlozhki_log":    [],
         }
 
         # Становищата се четат винаги — независимо от останалите проверки
@@ -379,6 +435,10 @@ class ProjectChecker:
              "item_id": i.get("id", ""), "web_url": ""}
             for i in podlozhki_dwg[:10]
         ]
+
+        # ПОДЛОЖКИ ЛОГ — история на изпратени подложки от Extension-а
+        raw_log = self._read_podlozhki_log(podlozhki_root)
+        project_report["podlozhki_log"] = self._format_podlozhki_log(raw_log)
 
         # ПРЕДАДЕНИ — рекурсивно в всички подпапки
         predadeni_path  = f"{project_path}/CAD/АРХИТЕКТУРА/ПРЕДАДЕНИ"

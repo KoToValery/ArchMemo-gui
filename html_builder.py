@@ -29,10 +29,13 @@ def build_html_report(city: str, project_name: str, full_name: str,
                       podlozhki_files: list = None,
                       project_id: str = "",
                       is_hidden: bool = False,
-                      missing_docs: bool = False) -> str:
+                      missing_docs: bool = False,
+                      podlozhki_log: list = None) -> str:
     check_time = datetime.now().strftime("%d.%m.%Y %H:%M")
     if podlozhki_files is None:
         podlozhki_files = []
+    if podlozhki_log is None:
+        podlozhki_log = []
     pid = project_id or project_path
 
     # Статус архитектура
@@ -107,6 +110,55 @@ def build_html_report(city: str, project_name: str, full_name: str,
           </div>
         </div>"""
 
+    # ИСТОРИЯ НА ИЗПРАТЕНИ ПОДЛОЖКИ
+    _SPEC_COLORS = {
+        "ЕЛ":          "#d5e8f7;color:#1a6fa8",
+        "ВиК":         "#d5f0e8;color:#1a7a52",
+        "ОВК":         "#fde8d5;color:#a85a1a",
+        "КОНСТРУКЦИИ": "#ede8fd;color:#5a1aa8",
+        "КС":          "#fdf5d5;color:#8a6a00",
+        "ПБ":          "#fdd5d5;color:#a81a1a",
+        "ВЕРТИКАЛНА":  "#d5fdf5;color:#007a6a",
+    }
+
+    def _spec_badge(specialty):
+        style = _SPEC_COLORS.get(specialty, "#e8e8e8;color:#555")
+        return f'<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:{style}">{specialty}</span>'
+
+    if podlozhki_log:
+        log_rows = ""
+        for entry in podlozhki_log:
+            log_rows += (
+                f"<tr>"
+                f"<td>{_spec_badge(entry['specialty'])}</td>"
+                f"<td>{entry['engineer']}</td>"
+                f"<td>{entry['last_send']}</td>"
+                f"<td style='text-align:center'>{entry['total_sends']}</td>"
+                f"</tr>"
+            )
+        podlozhki_log_html = f"""
+        <div class="card-section collapsible">
+          <div class="section-title" onclick="toggleSection(this)">
+            📧 История на изпратени подложки ({len(podlozhki_log)}) <span class="toggle-icon">▼</span>
+          </div>
+          <div class="section-content">
+            <table class="spec-table">
+              <thead><tr><th>Специалност</th><th>Инженер</th><th>Последно изпращане</th><th>Общо</th></tr></thead>
+              <tbody>{log_rows}</tbody>
+            </table>
+          </div>
+        </div>"""
+    else:
+        podlozhki_log_html = """
+        <div class="card-section collapsible">
+          <div class="section-title" onclick="toggleSection(this)">
+            📧 История на изпратени подложки <span class="toggle-icon">▼</span>
+          </div>
+          <div class="section-content">
+            <p style="color:#95a5a6;font-size:13px;margin:6px 0">Няма записи за изпращане.</p>
+          </div>
+        </div>"""
+
     # Становища
     def _doc_rows(files, badge, cls):
         return "".join(
@@ -177,5 +229,6 @@ def build_html_report(city: str, project_name: str, full_name: str,
     </div>
     {delivered_html}
     {podlozhki_html}
+    {podlozhki_log_html}
   </div>
 </div>"""
