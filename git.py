@@ -10,7 +10,7 @@ from tkinter import ttk, messagebox, simpledialog
 import os
 import queue
 
-PROJECT_DIR = "/home/koto/projects/ArchMemo-gui"
+PROJECT_DIR = "H:\My Drive\RABOTNA\PYTHON\ArchiMemo\ArchMemo-gui"
 
 # ─── Цветова схема (тъмна, developer тема) ───────────────────────────────────
 COLORS = {
@@ -353,11 +353,13 @@ class GitHelperApp(tk.Tk):
 
             if dirty:
                 self._post(lambda: self._log("  Откривам незапазени промени — stash-ирам...", "warn"))
-                out, err_, rc = run_cmd("git stash")
+                out, err_, rc = run_cmd("git stash push --include-untracked -m 'auto-stash before pull'")
                 if rc != 0:
-                    self._post(lambda: self._log(f"  Stash грешка: {err_}", "err"))
-                    return
-                stashed = True
+                    # Ако stash се провали — опитай pull директно (merge strategy)
+                    self._post(lambda e=err_: self._log(f"  Stash не успя ({e}) — pull с merge...", "warn"))
+                    stashed = False
+                else:
+                    stashed = True
 
             out, err_, rc = run_cmd("git pull origin main")
             for line in (out + err_).splitlines():

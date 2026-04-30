@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<title>ArchiMemo — Настройки на имейли</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    margin: 0;
+    padding: 20px;
+    background: #f5f6fa;
+    color: #2c3e50;
+    font-size: 14px;
+    min-width: 500px;
+  }
+  h2 {
+    margin: 0 0 16px;
+    font-size: 18px;
+    color: #2c3e50;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #7f8c8d;
+    margin-bottom: 16px;
+  }
+  .add-section {
+    background: #fff;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+  .form-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .form-row input, .form-row select {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    flex: 1;
+    min-width: 140px;
+  }
+  .form-row input:focus, .form-row select:focus {
+    outline: none;
+    border-color: #3498db;
+  }
+  .btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .btn-primary {
+    background: #3498db;
+    color: #fff;
+  }
+  .btn-primary:hover {
+    background: #2980b9;
+  }
+  .btn-danger {
+    background: #e74c3c;
+    color: #fff;
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+  .btn-danger:hover {
+    background: #c0392b;
+  }
+  .email-list {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    overflow: hidden;
+  }
+  .email-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #ecf0f1;
+  }
+  .email-item:last-child {
+    border-bottom: none;
+  }
+  .email-item:hover {
+    background: #f8f9fa;
+  }
+  .email-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .email-address {
+    font-weight: 500;
+    color: #2c3e50;
+  }
+  .email-meta {
+    font-size: 12px;
+    color: #7f8c8d;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 6px;
+  }
+  .badge-el   { background: #d5e8f7; color: #1a6fa8; }
+  .badge-vik  { background: #d5f0e8; color: #1a7a52; }
+  .badge-ovk  { background: #fde8d5; color: #a85a1a; }
+  .badge-kon  { background: #ede8fd; color: #5a1aa8; }
+  .badge-ks   { background: #fdf5d5; color: #8a6a00; }
+  .badge-pb   { background: #fdd5d5; color: #a81a1a; }
+  .badge-vert { background: #d5fdf5; color: #007a6a; }
+  .badge-def  { background: #e8e8e8; color: #555; }
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #95a5a6;
+    font-style: italic;
+  }
+  .status-msg {
+    margin-top: 12px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    display: none;
+  }
+  .status-msg.success {
+    display: block;
+    background: #eafaf1;
+    color: #27ae60;
+    border: 1px solid #a9dfbf;
+  }
+  .status-msg.error {
+    display: block;
+    background: #fdedec;
+    color: #e74c3c;
+    border: 1px solid #f5b7b1;
+  }
+</style>
+</head>
+<body>
+<h2>⚙️ ArchiMemo — Настройки</h2>
+<div class="subtitle">Управление на имейл адресите за автоматично разпознаване на специалности при изпращане на подложки.</div>
+
+<div class="add-section">
+  <div style="font-weight: 600; margin-bottom: 12px; font-size: 15px;">Добави нов имейл</div>
+  <div class="form-row">
+    <input type="email" id="newEmail" placeholder="Имейл адрес (напр. example@mail.bg)">
+    <input type="text" id="newName" placeholder="Име (напр. Иван)">
+    <select id="newSpecialty">
+      <option value="ЕЛ">ЕЛ</option>
+      <option value="ВиК">ВиК</option>
+      <option value="ОВК">ОВК</option>
+      <option value="КОНСТРУКЦИИ">КОНСТРУКЦИИ</option>
+      <option value="КС">КС</option>
+      <option value="ПБ">ПБ</option>
+      <option value="ВЕРТИКАЛНА">ВЕРТИКАЛНА</option>
+      <option value="Озеленяване">Озеленяване</option>
+      <option value="ТЕХНОЛОГ">ТЕХНОЛОГ</option>
+      <option value="ПЪТНО">ПЪТНО</option>
+      <option value="АСАНСЬОР">АСАНСЬОР</option>
+      <option value="Nola7">Nola7</option>
+      <option value="Dev">Dev</option>
+    </select>
+    <button class="btn btn-primary" id="btnAdd">Добави</button>
+  </div>
+  <div class="status-msg" id="statusMsg"></div>
+</div>
+
+<div class="email-list" id="emailList">
+  <div class="empty-state">Зареждане...</div>
+</div>
+
+<script src="options.js"></script>
+</body>
+</html>

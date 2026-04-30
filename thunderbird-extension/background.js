@@ -1,24 +1,64 @@
 // ArchiMemo — background.js
 // Слуша onAfterSend, проверява .dwg прикачени + специалности, отваря popup.
 
-const SPECIALTY_EMAILS = [
-  { email: "lachezar.tzvetkov@gmail.com", name: "Лъчо",         specialty: "ЕЛ" },
+const STORAGE_KEY = "specialty_emails";
+
+// Default имейли — зареждат се при първо стартиране или ако storage е празен
+const DEFAULT_SPECIALTY_EMAILS = [
+  { email: "lachezar.tzvetkov@gmail.com", name: "Лъчо",          specialty: "ЕЛ" },
+  { email: "chikalov.eood@abv.bg",        name: "Чикалов",       specialty: "ЕЛ" },
   { email: "astra.v@abv.bg",              name: "Веска",         specialty: "ВиК" },
   { email: "milena_mdg@mail.bg",          name: "Милена",        specialty: "ВиК" },
   { email: "mihailborkovtodorov@gmail.com",name: "Мишо Тодоров", specialty: "ВиК" },
   { email: "ingilizova_ov@abv.bg",        name: "Юлия",          specialty: "ОВК" },
+  { email: "amitev@abv.bg",               name: "Сашо Митев",    specialty: "ОВК" },
   { email: "v_tunev@abv.bg",              name: "Тунев",         specialty: "КОНСТРУКЦИИ" },
   { email: "universproekt@abv.bg",        name: "Пламен",        specialty: "КОНСТРУКЦИИ" },
-  { email: "kvmihov@gmail.com",           name: "Михов",         specialty: "ВЕРТИКАЛНА" },
   { email: "gandjov@yahoo.com",           name: "Ганджов",       specialty: "КОНСТРУКЦИИ" },
   { email: "gandjov@gmail.com",           name: "Ганджов",       specialty: "КОНСТРУКЦИИ" },
   { email: "spas_zv@mail.bg",             name: "Звънчаров",     specialty: "КОНСТРУКЦИИ" },
   { email: "spaska.ruycheva@abv.bg",      name: "Руйчева",       specialty: "КОНСТРУКЦИИ" },
-  { email: "kaleti@abv.bg",               name: "Любина",        specialty: "КС" },
-  { email: "pantev@nola7.com",            name: "Нола7",         specialty: "Nola7" },
-  { email: "kostadintosev@gmail.com",     name: "Koto",          specialty: "Dev" },
+  { email: "vanya_orbelus@abv.bg",        name: "Ваня Орбелус",  specialty: "КОНСТРУКЦИИ" },
+  { email: "kvmihov@gmail.com",           name: "Михов",         specialty: "ВЕРТИКАЛНА" },
+  { email: "mapgeo@abv.bg",               name: "Пиргов",        specialty: "ВЕРТИКАЛНА" },
+  { email: "milko7920@gmail.com",         name: "Милко",         specialty: "ВЕРТИКАЛНА" },
+  { email: "gd2000@abv.bg",               name: "gd2000@abv.bg", specialty: "ВЕРТИКАЛНА" },
+  { email: "popgavrilov@yahoo.com",       name: "Попгаврилов",   specialty: "ВЕРТИКАЛНА" },
+  { email: "venang@abv.bg",               name: "В.Ангелов", specialty: "ВЕРТИКАЛНА" },
+  { email: "mapgeo_ban@abv.bg",           name: "Г.Гърменов",    specialty: "ВЕРТИКАЛНА" },
+  { email: "geocorrect_razlog@abv.bg",    name: "geocorrect_razlog@abv.bg", specialty: "ВЕРТИКАЛНА" },
+  { email: "geokadpreciz@abv.bg",         name: "geokadpreciz@abv.bg",      specialty: "ВЕРТИКАЛНА" },
+  { email: "geomap_geomap@mail.bg",       name: "geomap_geomap@mail.bg",    specialty: "ВЕРТИКАЛНА" },
   { email: "fire_trading@abv.bg",         name: "Марценков",     specialty: "ПБ" },
+  { email: "nikola_kiuchukov@abv.bg",     name: "Кючуков",       specialty: "ПБ" },
+  { email: "kaleti@abv.bg",               name: "Любина",        specialty: "КС" },
+  { email: "stip46@abv.bg",               name: "И.Петров",      specialty: "КС" },
+  { email: "ventsi.andonov@abv.bg",        name: "В.Андонов",     specialty: "Озеленяване" },
+  { email: "pantev@nola7.com",            name: "Нола7",         specialty: "Nola7" },
+  { email: "kazakov@nola7.com",           name: "Нола7",         specialty: "Nola7" },
+  { email: "nola7blagoevgrad@nola7.com",  name: "Нола7",         specialty: "Nola7" },
+  { email: "k.danov@intratechstudio.com", name: "Данов",         specialty: "ТЕХНОЛОГ" },
+  { email: "dvn_proekt@mail.bg",          name: "Митко пътно",   specialty: "ПЪТНО" },
+  { email: "petko.shopov@gmail.com",      name: "Шопов пътно",   specialty: "ПЪТНО" },
+  { email: "ottiss@mail.bg",              name: "ottiss@mail.bg", specialty: "АСАНСьОР" },
+  { email: "kostadintosev@gmail.com",     name: "Koto",          specialty: "Dev" },
+
 ];
+
+// Зарежда имейлите от storage — ако няма нищо записано, записва defaults
+async function loadSpecialtyEmails() {
+  const result = await messenger.storage.sync.get(STORAGE_KEY);
+  let emails = result[STORAGE_KEY];
+
+  if (!emails || !Array.isArray(emails) || emails.length === 0) {
+    // Първо стартиране — записваме defaults
+    await messenger.storage.sync.set({ [STORAGE_KEY]: DEFAULT_SPECIALTY_EMAILS });
+    console.log("ArchiMemo: Initialized storage with default emails");
+    return DEFAULT_SPECIALTY_EMAILS;
+  }
+
+  return emails;
+}
 
 // Нормализира имейл адрес — маха display name, < >, интервали, lowercase
 function normalizeEmail(raw) {
@@ -69,8 +109,12 @@ messenger.compose.onAfterSend.addListener(async (tab, sendInfo) => {
 
     const recipients = collectRecipients(msg);
     console.log("ArchiMemo: Recipients", recipients);
-    
-    const matched = SPECIALTY_EMAILS.filter(se =>
+
+    // Зареждаме имейлите от storage
+    const specialtyEmails = await loadSpecialtyEmails();
+    console.log("ArchiMemo: Loaded emails from storage", specialtyEmails.length);
+
+    const matched = specialtyEmails.filter(se =>
       recipients.includes(se.email.toLowerCase())
     );
     console.log("ArchiMemo: Matched specialties", matched);
